@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Prathee Jeganathan" />
+
+
+<title>Latent Dirichlet Allocation to Integrate Single-Cell Targeted Proteomics Data</title>
+
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; left: -4em; }
+pre.numberSource a.sourceLine::before
+  { content: attr(data-line-number);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Latent Dirichlet Allocation to Integrate Single-Cell Targeted Proteomics Data</h1>
+<h4 class="author">Prathee Jeganathan<a href="#fn1" class="footnote-ref" id="fnref1"><sup>1</sup></a></h4>
+
+
+
+<p>We use this R Markdown to run the topic modeling.</p>
+<p>We use iterations 100 for this vignette, but the results for iterations 2000 is available.</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1">K &lt;-<span class="st"> </span><span class="dv">5</span></a>
+<a class="sourceLine" id="cb1-2" data-line-number="2">K</a></code></pre></div>
+<pre><code>## [1] 5</code></pre>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1">iter &lt;-<span class="st"> </span><span class="dv">100</span></a>
+<a class="sourceLine" id="cb3-2" data-line-number="2">iter</a></code></pre></div>
+<pre><code>## [1] 100</code></pre>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">library</span>(SingleCellExperiment)</a>
+<a class="sourceLine" id="cb5-2" data-line-number="2"><span class="kw">library</span>(ggplot2)</a>
+<a class="sourceLine" id="cb5-3" data-line-number="3"><span class="kw">library</span>(rstan)</a>
+<a class="sourceLine" id="cb5-4" data-line-number="4"><span class="kw">library</span>(plyr)</a>
+<a class="sourceLine" id="cb5-5" data-line-number="5"><span class="kw">library</span>(reshape2)</a>
+<a class="sourceLine" id="cb5-6" data-line-number="6"><span class="kw">library</span>(readr)</a>
+<a class="sourceLine" id="cb5-7" data-line-number="7"><span class="kw">library</span>(magrittr)</a>
+<a class="sourceLine" id="cb5-8" data-line-number="8"><span class="kw">library</span>(MultiAssayExperiment)</a>
+<a class="sourceLine" id="cb5-9" data-line-number="9"><span class="kw">library</span>(dplyr)</a>
+<a class="sourceLine" id="cb5-10" data-line-number="10"><span class="kw">library</span>(DESeq2)</a>
+<a class="sourceLine" id="cb5-11" data-line-number="11"><span class="kw">library</span>(abind)</a>
+<a class="sourceLine" id="cb5-12" data-line-number="12"><span class="kw">library</span>(tibble)</a>
+<a class="sourceLine" id="cb5-13" data-line-number="13"><span class="kw">library</span>(RColorBrewer)</a>
+<a class="sourceLine" id="cb5-14" data-line-number="14"><span class="kw">library</span>(raster)</a>
+<a class="sourceLine" id="cb5-15" data-line-number="15"><span class="kw">library</span>(stringr)</a>
+<a class="sourceLine" id="cb5-16" data-line-number="16"><span class="kw">library</span>(ggthemes)</a>
+<a class="sourceLine" id="cb5-17" data-line-number="17"><span class="kw">library</span>(pheatmap)</a>
+<a class="sourceLine" id="cb5-18" data-line-number="18"><span class="kw">library</span>(gtools)</a>
+<a class="sourceLine" id="cb5-19" data-line-number="19"><span class="kw">library</span>(uwot)</a>
+<a class="sourceLine" id="cb5-20" data-line-number="20"><span class="kw">library</span>(gridExtra)</a></code></pre></div>
+<div id="cytof" class="section level1">
+<h1>CyTOF</h1>
+<ul>
+<li>Wagner 2018 Cytof
+<ul>
+<li>140 breast cancer patients; Of 140, 6 tripple negative (TN)</li>
+<li>cd45_sce_dropna$Clinical.Subtype == &quot;TN</li>
+<li>3 cancer-free</li>
+<li>73 protein markers in immune-centric and tumor-centric microenvironment</li>
+</ul></li>
+<li>Keren 2018 Multiplex Ion Bean Imaging (MIBI)
+<ul>
+<li>Tumor-immune microenvironment in TN patients</li>
+<li>41 TN patients</li>
+<li>36 proteins</li>
+</ul></li>
+</ul>
+<p>We will choose patients with TN with immune and tumor cells in both CyTOF and MIBI for the integrative analysis.</p>
+</div>
+<div id="mass-tag-cytof-breast-cancer-data" class="section level1">
+<h1>Mass-Tag CyTOF Breast Cancer Data</h1>
+<ul>
+<li>For this analysis we use <strong>cd45.sce</strong>: CD45+ cells from the live cells; downsampled to 426,872 cells (assayed on immune panel) <span class="math inline">\(\times\)</span> 35 proteins</li>
+</ul>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">load</span>(<span class="st">&quot;masstagSCE.rda&quot;</span>)</a>
+<a class="sourceLine" id="cb6-2" data-line-number="2">cd45.sce <span class="co"># 38 * 426872</span></a>
+<a class="sourceLine" id="cb6-3" data-line-number="3"><span class="kw">rm</span>(epith.sce, livecells.sce, myeloid.sce, tcell.sce)</a></code></pre></div>
+<p>Drop the five subjects without any clinical data. We can use Gender variable to identify those subjects</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="kw">unique</span>(<span class="kw">colData</span>(cd45.sce)<span class="op">$</span>patient_id.y[<span class="kw">which</span>(<span class="kw">is.na</span>(<span class="kw">colData</span>(cd45.sce)<span class="op">$</span>Gender))])</a>
+<a class="sourceLine" id="cb7-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb7-3" data-line-number="3">cd45_to_keep &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="op">!</span><span class="kw">is.na</span>(<span class="kw">colData</span>(cd45.sce)<span class="op">$</span>Gender))</a>
+<a class="sourceLine" id="cb7-4" data-line-number="4">cd45.sce_dropna &lt;-<span class="st"> </span>cd45.sce[,cd45_to_keep]</a>
+<a class="sourceLine" id="cb7-5" data-line-number="5">cd45.sce_dropna <span class="co"># 38 * 420685</span></a>
+<a class="sourceLine" id="cb7-6" data-line-number="6"><span class="co"># To verify there are no (true) NA's left:</span></a>
+<a class="sourceLine" id="cb7-7" data-line-number="7"><span class="kw">sum</span>(<span class="kw">is.na</span>(<span class="kw">rowData</span>(cd45.sce_dropna)))</a>
+<a class="sourceLine" id="cb7-8" data-line-number="8"><span class="kw">rm</span>(cd45.sce, cd45_to_keep)</a>
+<a class="sourceLine" id="cb7-9" data-line-number="9"></a>
+<a class="sourceLine" id="cb7-10" data-line-number="10"><span class="kw">saveRDS</span>(cd45.sce_dropna, <span class="st">&quot;cd45_sce_dropna.rds&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb8-1" data-line-number="1">cd45_sce &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="st">&quot;cd45_sce_dropna.rds&quot;</span>)</a>
+<a class="sourceLine" id="cb8-2" data-line-number="2">cd45_sce</a></code></pre></div>
+<p>There are three proteins without gene symbol in cd45_sce_dropna so we drop them (non-protein channels for cisplatin and DNA tags that are included)</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">cd45_sce &lt;-<span class="st"> </span>cd45_sce[<span class="op">!</span>(<span class="kw">rowData</span>(cd45_sce)<span class="op">$</span>hgnc_symbol <span class="op">==</span><span class="st"> &quot;na&quot;</span>) ,]</a>
+<a class="sourceLine" id="cb9-2" data-line-number="2">cd45_sce</a></code></pre></div>
+<p>There are two different health status</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1"><span class="kw">table</span>(<span class="kw">colData</span>(cd45_sce)<span class="op">$</span>Health.Status)</a></code></pre></div>
+<p>There are five different clinical subtypes of cancer patients, including TN and healthy</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1"><span class="kw">table</span>(<span class="kw">colData</span>(cd45_sce)<span class="op">$</span>Clinical.Subtype)</a></code></pre></div>
+<p>Subset TN clinical subtype</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1">cd45_sce &lt;-<span class="st"> </span>cd45_sce[, cd45_sce<span class="op">$</span>Clinical.Subtype <span class="op">==</span><span class="st"> &quot;TN&quot;</span>]</a>
+<a class="sourceLine" id="cb12-2" data-line-number="2">cd45_sce</a>
+<a class="sourceLine" id="cb12-3" data-line-number="3"><span class="co">#drop cells(columns) with no protein expression</span></a>
+<a class="sourceLine" id="cb12-4" data-line-number="4">cd45_sce &lt;-<span class="st"> </span>cd45_sce[, <span class="kw">colSums</span>(<span class="kw">assay</span>(cd45_sce)) <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span>]</a>
+<a class="sourceLine" id="cb12-5" data-line-number="5">cd45_sce</a>
+<a class="sourceLine" id="cb12-6" data-line-number="6"><span class="co"># drop levels of patient_id.x</span></a>
+<a class="sourceLine" id="cb12-7" data-line-number="7">cd45_sce<span class="op">$</span>patient_id.x &lt;-<span class="st"> </span><span class="kw">droplevels</span>(cd45_sce<span class="op">$</span>patient_id.x)</a></code></pre></div>
+<p>There are six TN patients and two had previous cancer incidence</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1"><span class="kw">table</span>(cd45_sce<span class="op">$</span>Previous.Cancer.Incidences, cd45_sce<span class="op">$</span>patient_id.x)</a></code></pre></div>
+<p>Let’s choose subject BB028 and will see whether we can infer co-location of immune cells.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1">cd45_sce &lt;-<span class="st"> </span>cd45_sce[ , cd45_sce<span class="op">$</span>patient_id.x <span class="op">==</span><span class="st"> &quot;BB028&quot;</span>]</a>
+<a class="sourceLine" id="cb14-2" data-line-number="2">cd45_sce</a></code></pre></div>
+<p>Add cell id’s to CyTOF</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1">cd45_sce<span class="op">$</span>cell_id &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;cytof_&quot;</span>, <span class="kw">seq</span>(<span class="dv">1</span>, <span class="kw">dim</span>(cd45_sce)[<span class="dv">2</span>]))</a>
+<a class="sourceLine" id="cb15-2" data-line-number="2"><span class="kw">colnames</span>(cd45_sce) &lt;-<span class="st"> </span>cd45_sce<span class="op">$</span>cell_id</a></code></pre></div>
+<p>heatmap</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb16-1" data-line-number="1">or &lt;-<span class="st"> </span><span class="kw">order</span>(<span class="kw">rowMeans</span>(<span class="kw">assay</span>(cd45_sce)), <span class="dt">decreasing=</span><span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb16-2" data-line-number="2">ass &lt;-<span class="st"> </span><span class="kw">assay</span>(cd45_sce)[or, ]</a>
+<a class="sourceLine" id="cb16-3" data-line-number="3"></a>
+<a class="sourceLine" id="cb16-4" data-line-number="4">df &lt;-<span class="st"> </span><span class="kw">as.data.frame</span>(<span class="kw">colData</span>(cd45_sce)[<span class="kw">colnames</span>(ass), <span class="kw">c</span>(<span class="st">&quot;patient_id.x&quot;</span>, <span class="st">&quot;Menopause.Status&quot;</span>, <span class="st">&quot;Previous.Cancer.Incidences&quot;</span>, <span class="st">&quot;HER2.IHC.Score&quot;</span> ,<span class="st">&quot;cell_id&quot;</span>)])</a>
+<a class="sourceLine" id="cb16-5" data-line-number="5"></a>
+<a class="sourceLine" id="cb16-6" data-line-number="6">df &lt;-<span class="st"> </span><span class="kw">with</span>(df, df[<span class="kw">order</span>(patient_id.x, Menopause.Status, Previous.Cancer.Incidences, HER2.IHC.Score, cell_id),])</a>
+<a class="sourceLine" id="cb16-7" data-line-number="7">ass &lt;-<span class="st"> </span>ass[, df<span class="op">$</span>cell_id]</a>
+<a class="sourceLine" id="cb16-8" data-line-number="8">df &lt;-<span class="st"> </span>dplyr<span class="op">::</span><span class="kw">select</span>(df, <span class="op">-</span>cell_id)</a>
+<a class="sourceLine" id="cb16-9" data-line-number="9"></a>
+<a class="sourceLine" id="cb16-10" data-line-number="10"><span class="kw">rownames</span>(ass) &lt;-<span class="st"> </span><span class="kw">rowData</span>(cd45_sce)<span class="op">$</span>marker_name[or]</a>
+<a class="sourceLine" id="cb16-11" data-line-number="11"></a>
+<a class="sourceLine" id="cb16-12" data-line-number="12">p &lt;-<span class="st"> </span><span class="kw">pheatmap</span>(ass, </a>
+<a class="sourceLine" id="cb16-13" data-line-number="13">              <span class="dt">annotation_col =</span> df, </a>
+<a class="sourceLine" id="cb16-14" data-line-number="14">              <span class="dt">cluster_rows =</span> <span class="ot">FALSE</span>, </a>
+<a class="sourceLine" id="cb16-15" data-line-number="15">              <span class="dt">cluster_cols =</span> <span class="ot">FALSE</span>, </a>
+<a class="sourceLine" id="cb16-16" data-line-number="16">              <span class="dt">fontsize_row =</span> <span class="dv">14</span>, </a>
+<a class="sourceLine" id="cb16-17" data-line-number="17">              <span class="dt">fontsize_col =</span> <span class="dv">14</span>, </a>
+<a class="sourceLine" id="cb16-18" data-line-number="18">              <span class="dt">show_colnames =</span> <span class="ot">FALSE</span>)</a></code></pre></div>
+</div>
+<div id="keren-et-al.-mibi-tof-breast-cancer-data" class="section level1">
+<h1>Keren et al., MIBI-TOF Breast Cancer Data</h1>
+<ul>
+<li>All 39 patients were TN</li>
+<li>The size-normalized raw intensity values are then arcsinh transformed and standardized across the markers.</li>
+</ul>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1"><span class="kw">load</span>(<span class="st">'mibiSCE.rda'</span>)</a>
+<a class="sourceLine" id="cb17-2" data-line-number="2">mibi.sce</a>
+<a class="sourceLine" id="cb17-3" data-line-number="3"></a>
+<a class="sourceLine" id="cb17-4" data-line-number="4"><span class="kw">summary</span>(<span class="kw">as.vector</span>(<span class="kw">assay</span>(mibi.sce)))</a>
+<a class="sourceLine" id="cb17-5" data-line-number="5"><span class="kw">rowMeans</span>(<span class="kw">assay</span>(mibi.sce))</a>
+<a class="sourceLine" id="cb17-6" data-line-number="6"><span class="kw">rowSds</span>(<span class="kw">assay</span>(mibi.sce))</a>
+<a class="sourceLine" id="cb17-7" data-line-number="7"><span class="kw">rowMax</span>(<span class="kw">assay</span>(mibi.sce))</a></code></pre></div>
+<p>Rows correspond to channels and columns correspond to cells. We can see all of the channels that were collected in this experiment:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb18-1" data-line-number="1"><span class="kw">rownames</span>(mibi.sce)</a></code></pre></div>
+<p>The 38 proteins can be easily identified by using the binary attribute is_protein from rowData (The other 11 comprise background, experimental controls (e.g, Au and dsDNA), and elements of potential interest in studying cellular mechanisms (e.g., Ca, Fe; relevant in other spatial studies))</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1">mibi.sce_proteins &lt;-<span class="st"> </span>mibi.sce[<span class="kw">rowData</span>(mibi.sce)<span class="op">$</span>is_protein <span class="op">==</span><span class="st"> </span><span class="dv">1</span>,]</a>
+<a class="sourceLine" id="cb19-2" data-line-number="2">mibi.sce_proteins</a>
+<a class="sourceLine" id="cb19-3" data-line-number="3"><span class="kw">rm</span>(mibi.sce)</a>
+<a class="sourceLine" id="cb19-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb19-5" data-line-number="5"><span class="kw">summary</span>(<span class="kw">as.vector</span>(<span class="kw">assay</span>(mibi.sce_proteins)))</a>
+<a class="sourceLine" id="cb19-6" data-line-number="6"><span class="kw">rowMeans</span>(<span class="kw">assay</span>(mibi.sce_proteins))</a>
+<a class="sourceLine" id="cb19-7" data-line-number="7"><span class="kw">rowSds</span>(<span class="kw">assay</span>(mibi.sce_proteins))</a>
+<a class="sourceLine" id="cb19-8" data-line-number="8"><span class="kw">rowMax</span>(<span class="kw">assay</span>(mibi.sce_proteins))</a></code></pre></div>
+<p>Cell type information is availble in the columns <em>tumor_group</em> and <em>immune_group</em> . That is, 51% of cells were Keratin positive tumor cells and 41% of cells were immune cells.</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" data-line-number="1"><span class="kw">round</span>(<span class="kw">table</span>(mibi.sce_proteins<span class="op">$</span>tumor_group)<span class="op">/</span><span class="kw">ncol</span>(mibi.sce_proteins),<span class="dv">2</span>)</a></code></pre></div>
+<p>Among the immune cells, macrophages and CD8, CD4+ T-cells and other immune cells were identified. 10% of all cells assayed were macrophages</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb21-1" data-line-number="1"><span class="co"># Immune Cells</span></a>
+<a class="sourceLine" id="cb21-2" data-line-number="2"><span class="kw">round</span>(<span class="kw">table</span>(mibi.sce_proteins<span class="op">$</span>immune_group)<span class="op">/</span><span class="kw">ncol</span>(mibi.sce_proteins),<span class="dv">2</span>)</a></code></pre></div>
+<p>Consider Keratin positive tumor cells and immune cells (there are different immune cell types within immune cells)</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb22-1" data-line-number="1"><span class="kw">table</span>(<span class="kw">colData</span>(mibi.sce_proteins)<span class="op">$</span>tumor_group)</a>
+<a class="sourceLine" id="cb22-2" data-line-number="2"><span class="kw">table</span>(<span class="kw">colData</span>(mibi.sce_proteins)<span class="op">$</span>tumor_group, <span class="kw">colData</span>(mibi.sce_proteins)<span class="op">$</span>immune_group)</a>
+<a class="sourceLine" id="cb22-3" data-line-number="3"></a>
+<a class="sourceLine" id="cb22-4" data-line-number="4">mibi.sce_proteins &lt;-<span class="st"> </span>mibi.sce_proteins[, <span class="kw">colData</span>(mibi.sce_proteins)<span class="op">$</span>tumor_group <span class="op">%in%</span><span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;Immune&quot;</span>, <span class="st">&quot;Keratin-positive tumor&quot;</span>)]</a></code></pre></div>
+<p>heatmap of protein expression in tumor and immune cells</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb23-1" data-line-number="1">mibi &lt;-<span class="st"> </span>mibi.sce_proteins</a>
+<a class="sourceLine" id="cb23-2" data-line-number="2">mibi</a>
+<a class="sourceLine" id="cb23-3" data-line-number="3"><span class="co">#drop cells(columns) with no protein expression</span></a>
+<a class="sourceLine" id="cb23-4" data-line-number="4">mibi &lt;-<span class="st"> </span>mibi[, <span class="kw">colSums</span>(<span class="kw">assay</span>(mibi)) <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span>]</a>
+<a class="sourceLine" id="cb23-5" data-line-number="5">mibi</a>
+<a class="sourceLine" id="cb23-6" data-line-number="6"><span class="co">#drop proteins(rows) with no expression in any of these cells</span></a>
+<a class="sourceLine" id="cb23-7" data-line-number="7">mibi &lt;-<span class="st"> </span>mibi[<span class="kw">rowSums</span>(<span class="kw">assay</span>(mibi)) <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span>, ]</a>
+<a class="sourceLine" id="cb23-8" data-line-number="8">mibi</a></code></pre></div>
+<p>rowData(mibi) doesn’t have cell IDs, so we add it.</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb24-1" data-line-number="1"><span class="kw">colData</span>(mibi)<span class="op">$</span>cell_id &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;mibi_&quot;</span>, <span class="kw">seq</span>(<span class="dv">1</span>, <span class="kw">dim</span>(mibi)[<span class="dv">2</span>]))</a>
+<a class="sourceLine" id="cb24-2" data-line-number="2"><span class="kw">colnames</span>(mibi) &lt;-<span class="st"> </span><span class="kw">colData</span>(mibi)<span class="op">$</span>cell_id</a>
+<a class="sourceLine" id="cb24-3" data-line-number="3">mibi<span class="op">$</span>DONOR_NO &lt;-<span class="st"> </span>mibi<span class="op">$</span>DONOR_NO <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">as.character</span>()</a></code></pre></div>
+<p>There are mibi$SampleID 42, 43, 44 with no DONOR_NO, remove cells from these SampleIDs</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1">mibi &lt;-<span class="st"> </span>mibi[, <span class="op">!</span>(mibi<span class="op">$</span>SampleID <span class="op">%in%</span><span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;42&quot;</span>, <span class="st">&quot;43&quot;</span>, <span class="st">&quot;44&quot;</span>))]</a>
+<a class="sourceLine" id="cb25-2" data-line-number="2">mibi</a></code></pre></div>
+</div>
+<div id="heatmap" class="section level1">
+<h1>heatmap</h1>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb26-1" data-line-number="1">or &lt;-<span class="st"> </span><span class="kw">order</span>(<span class="kw">rowMeans</span>(<span class="kw">assay</span>(mibi)), <span class="dt">decreasing=</span><span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb26-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb26-3" data-line-number="3">g &lt;-<span class="st"> </span>mibi<span class="op">$</span>DONOR_NO <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">factor</span>()</a>
+<a class="sourceLine" id="cb26-4" data-line-number="4">choose_by_patient &lt;-<span class="st"> </span><span class="kw">split</span>(<span class="kw">colData</span>(mibi)<span class="op">%&gt;%</span><span class="st"> </span>data.frame, g)</a>
+<a class="sourceLine" id="cb26-5" data-line-number="5">sample_by_patient &lt;-<span class="st"> </span><span class="kw">sample</span>(<span class="kw">seq</span>(<span class="dv">1</span>, <span class="kw">length</span>(choose_by_patient)), <span class="dv">5</span>)</a>
+<a class="sourceLine" id="cb26-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb26-7" data-line-number="7"></a>
+<a class="sourceLine" id="cb26-8" data-line-number="8">no_cells_per_patient &lt;-<span class="st"> </span><span class="kw">table</span>(mibi<span class="op">$</span>DONOR_NO) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb26-9" data-line-number="9">no_cells_per_patient &lt;-<span class="st"> </span><span class="kw">data.frame</span>(no_cells_per_patient<span class="op">$</span>Freq)</a>
+<a class="sourceLine" id="cb26-10" data-line-number="10">no_cells_sample &lt;-<span class="st"> </span><span class="kw">apply</span>(no_cells_per_patient, <span class="dv">1</span>, <span class="cf">function</span>(y){</a>
+<a class="sourceLine" id="cb26-11" data-line-number="11">  <span class="kw">min</span>(<span class="dv">50</span>, y)</a>
+<a class="sourceLine" id="cb26-12" data-line-number="12">})</a>
+<a class="sourceLine" id="cb26-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb26-14" data-line-number="14">patient_list &lt;-<span class="st"> </span><span class="kw">as.list</span>(<span class="kw">seq</span>(<span class="dv">1</span>, <span class="kw">length</span>(choose_by_patient)))</a>
+<a class="sourceLine" id="cb26-15" data-line-number="15">  </a>
+<a class="sourceLine" id="cb26-16" data-line-number="16">choose_by_patient_cells &lt;-<span class="st"> </span><span class="kw">lapply</span>(patient_list, <span class="cf">function</span>(x){</a>
+<a class="sourceLine" id="cb26-17" data-line-number="17">  sample_cell_ids &lt;-<span class="st"> </span><span class="kw">sample</span>(choose_by_patient[[x]]<span class="op">$</span>cell_id, no_cells_sample[x])</a>
+<a class="sourceLine" id="cb26-18" data-line-number="18"></a>
+<a class="sourceLine" id="cb26-19" data-line-number="19">  <span class="kw">return</span>(sample_cell_ids)</a>
+<a class="sourceLine" id="cb26-20" data-line-number="20"></a>
+<a class="sourceLine" id="cb26-21" data-line-number="21">}) </a>
+<a class="sourceLine" id="cb26-22" data-line-number="22">choose_by_patient_cells &lt;-<span class="st"> </span>choose_by_patient_cells[sample_by_patient]</a>
+<a class="sourceLine" id="cb26-23" data-line-number="23"></a>
+<a class="sourceLine" id="cb26-24" data-line-number="24">choose_by_patient_cells &lt;-<span class="st"> </span>choose_by_patient_cells <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">unlist</span>()</a>
+<a class="sourceLine" id="cb26-25" data-line-number="25"><span class="kw">names</span>(choose_by_patient_cells) &lt;-<span class="st"> </span><span class="ot">NULL</span></a>
+<a class="sourceLine" id="cb26-26" data-line-number="26"></a>
+<a class="sourceLine" id="cb26-27" data-line-number="27">ass &lt;-<span class="st"> </span><span class="kw">assay</span>(mibi)[or, <span class="kw">which</span>(mibi<span class="op">$</span>cell_id <span class="op">%in%</span><span class="st">  </span>choose_by_patient_cells)]</a>
+<a class="sourceLine" id="cb26-28" data-line-number="28"></a>
+<a class="sourceLine" id="cb26-29" data-line-number="29"></a>
+<a class="sourceLine" id="cb26-30" data-line-number="30">df &lt;-<span class="st"> </span><span class="kw">as.data.frame</span>(<span class="kw">colData</span>(mibi)[<span class="kw">colnames</span>(ass), <span class="kw">c</span>(<span class="st">&quot;DONOR_NO&quot;</span>, <span class="st">&quot;tumor_group&quot;</span>, <span class="st">&quot;immune_group&quot;</span>,<span class="st">&quot;cell_id&quot;</span>)])</a>
+<a class="sourceLine" id="cb26-31" data-line-number="31"></a>
+<a class="sourceLine" id="cb26-32" data-line-number="32">df &lt;-<span class="st"> </span><span class="kw">with</span>(df, df[<span class="kw">order</span>(DONOR_NO, tumor_group, immune_group,cell_id), ])</a>
+<a class="sourceLine" id="cb26-33" data-line-number="33">ass &lt;-<span class="st"> </span>ass[, df<span class="op">$</span>cell_id]</a>
+<a class="sourceLine" id="cb26-34" data-line-number="34">df &lt;-<span class="st"> </span>dplyr<span class="op">::</span><span class="kw">select</span>(df, <span class="op">-</span>cell_id)</a>
+<a class="sourceLine" id="cb26-35" data-line-number="35"></a>
+<a class="sourceLine" id="cb26-36" data-line-number="36"><span class="kw">rownames</span>(ass) &lt;-<span class="st"> </span><span class="kw">rownames</span>(<span class="kw">rowData</span>(mibi))[or]</a>
+<a class="sourceLine" id="cb26-37" data-line-number="37"></a>
+<a class="sourceLine" id="cb26-38" data-line-number="38">p &lt;-<span class="st"> </span><span class="kw">pheatmap</span>(ass, </a>
+<a class="sourceLine" id="cb26-39" data-line-number="39">              <span class="dt">annotation_col =</span> df, </a>
+<a class="sourceLine" id="cb26-40" data-line-number="40">              <span class="dt">cluster_rows =</span> <span class="ot">FALSE</span>, </a>
+<a class="sourceLine" id="cb26-41" data-line-number="41">              <span class="dt">cluster_cols =</span> <span class="ot">FALSE</span>, </a>
+<a class="sourceLine" id="cb26-42" data-line-number="42">              <span class="dt">fontsize_row =</span> <span class="dv">14</span>, </a>
+<a class="sourceLine" id="cb26-43" data-line-number="43">              <span class="dt">fontsize_col =</span> <span class="dv">14</span>, </a>
+<a class="sourceLine" id="cb26-44" data-line-number="44">              <span class="dt">show_colnames =</span> <span class="ot">FALSE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1">cell_type &lt;-<span class="st"> </span><span class="kw">ifelse</span>(mibi<span class="op">$</span>immune_group <span class="op">!=</span><span class="st"> &quot;not immune&quot;</span>, mibi<span class="op">$</span>immune_group, <span class="st">&quot;Tumor&quot;</span>)</a>
+<a class="sourceLine" id="cb27-2" data-line-number="2">mibi<span class="op">$</span>cell_type &lt;-<span class="st"> </span>cell_type</a></code></pre></div>
+</div>
+<div id="add-spatial-location" class="section level1">
+<h1>Add spatial location</h1>
+<p>Because we already run this code, we read the saved mae with spatial information</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb28-1" data-line-number="1">tiff_file_list &lt;-<span class="st"> </span><span class="kw">list.files</span>(<span class="st">&quot;TNBC_shareCellData/&quot;</span>, <span class="dt">pattern =</span> <span class="st">&quot;.tiff&quot;</span>)</a>
+<a class="sourceLine" id="cb28-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb28-3" data-line-number="3">mibi_sample_id_list &lt;-<span class="st"> </span><span class="kw">list</span>()</a>
+<a class="sourceLine" id="cb28-4" data-line-number="4"><span class="cf">for</span>(id <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">length</span>(tiff_file_list)){</a>
+<a class="sourceLine" id="cb28-5" data-line-number="5">    str_name &lt;-<span class="st"> </span><span class="kw">paste</span>(<span class="st">&quot;TNBC_shareCellData/&quot;</span>, tiff_file_list[id], <span class="dt">sep =</span> <span class="st">&quot;&quot;</span>)</a>
+<a class="sourceLine" id="cb28-6" data-line-number="6">    </a>
+<a class="sourceLine" id="cb28-7" data-line-number="7">    sample_id &lt;-<span class="st"> </span><span class="kw">as.numeric</span>(<span class="kw">gsub</span>(<span class="st">&quot;p&quot;</span>, <span class="st">&quot;&quot;</span>, <span class="kw">gsub</span>(<span class="st">&quot;_labeledcellData.tiff&quot;</span>, <span class="st">&quot;&quot;</span>, tiff_file_list[id])))</a>
+<a class="sourceLine" id="cb28-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb28-9" data-line-number="9">    r &lt;-<span class="st"> </span><span class="kw">raster</span>(str_name)</a>
+<a class="sourceLine" id="cb28-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb28-11" data-line-number="11">    mibi_sample_id_list[[id]] &lt;-<span class="st"> </span>mibi[, mibi<span class="op">$</span>SampleID <span class="op">==</span><span class="st"> </span>sample_id]</a>
+<a class="sourceLine" id="cb28-12" data-line-number="12">    </a>
+<a class="sourceLine" id="cb28-13" data-line-number="13">    df_rP &lt;-<span class="st"> </span><span class="kw">rasterToPoints</span>(r)</a>
+<a class="sourceLine" id="cb28-14" data-line-number="14">    df_rP &lt;-<span class="st"> </span><span class="kw">data.frame</span>(df_rP)</a>
+<a class="sourceLine" id="cb28-15" data-line-number="15">    <span class="kw">colnames</span>(df_rP) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;X&quot;</span>, <span class="st">&quot;Y&quot;</span>, <span class="st">&quot;values&quot;</span>)</a>
+<a class="sourceLine" id="cb28-16" data-line-number="16">    noise_not_in_mibi &lt;-<span class="st"> </span><span class="kw">unique</span>(df_rP<span class="op">$</span>values[<span class="op">!</span>df_rP<span class="op">$</span>values <span class="op">%in%</span><span class="st"> </span>mibi_sample_id_list[[id]]<span class="op">$</span>cellLabelInImage])</a>
+<a class="sourceLine" id="cb28-17" data-line-number="17">    </a>
+<a class="sourceLine" id="cb28-18" data-line-number="18">    <span class="co"># compute centroid of each cell</span></a>
+<a class="sourceLine" id="cb28-19" data-line-number="19">    centroid_X &lt;-<span class="st"> </span><span class="kw">aggregate</span>(df_rP[,<span class="dv">1</span>], <span class="dt">by =</span> <span class="kw">list</span>(df_rP[,<span class="dv">3</span>]), <span class="dt">FUN =</span> median)</a>
+<a class="sourceLine" id="cb28-20" data-line-number="20">    centroid_Y &lt;-<span class="st"> </span><span class="kw">aggregate</span>(df_rP[,<span class="dv">2</span>], <span class="dt">by =</span> <span class="kw">list</span>(df_rP[,<span class="dv">3</span>]), <span class="dt">FUN =</span> median)</a>
+<a class="sourceLine" id="cb28-21" data-line-number="21">    centroid_XY &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">centroid_X =</span> centroid_X<span class="op">$</span>x, <span class="dt">centroid_Y =</span> centroid_Y<span class="op">$</span>x, <span class="dt">group =</span> centroid_X<span class="op">$</span>Group<span class="fl">.1</span>)</a>
+<a class="sourceLine" id="cb28-22" data-line-number="22">    cell_label_with_bg_XY &lt;-<span class="st"> </span><span class="kw">mapvalues</span>((centroid_XY<span class="op">$</span>group), <span class="dt">from =</span> noise_not_in_mibi, <span class="dt">to =</span> <span class="kw">rep</span>(<span class="dv">0</span>, <span class="kw">length</span>(noise_not_in_mibi)))</a>
+<a class="sourceLine" id="cb28-23" data-line-number="23">    </a>
+<a class="sourceLine" id="cb28-24" data-line-number="24">    cell_label_with_bg_XY &lt;-<span class="st"> </span><span class="kw">mapvalues</span>((cell_label_with_bg_XY), <span class="dt">from =</span> mibi_sample_id_list[[id]]<span class="op">$</span>cellLabelInImage, <span class="dt">to =</span> mibi_sample_id_list[[id]]<span class="op">$</span>cell_type)</a>
+<a class="sourceLine" id="cb28-25" data-line-number="25">    centroid_XY<span class="op">$</span>cell_label_with_bg_XY &lt;-<span class="st"> </span>cell_label_with_bg_XY</a>
+<a class="sourceLine" id="cb28-26" data-line-number="26">    </a>
+<a class="sourceLine" id="cb28-27" data-line-number="27">    <span class="co"># filter the center info without cells </span></a>
+<a class="sourceLine" id="cb28-28" data-line-number="28">    centroid_XY &lt;-<span class="st"> </span>centroid_XY[centroid_XY<span class="op">$</span>cell_label_with_bg_XY <span class="op">!=</span><span class="st"> &quot;0&quot;</span>, ]</a>
+<a class="sourceLine" id="cb28-29" data-line-number="29">    </a>
+<a class="sourceLine" id="cb28-30" data-line-number="30">    </a>
+<a class="sourceLine" id="cb28-31" data-line-number="31">    dd_sample_id &lt;-<span class="st"> </span><span class="kw">colData</span>(mibi_sample_id_list[[id]]) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb28-32" data-line-number="32">    dd_sample_id &lt;-<span class="st"> </span><span class="kw">left_join</span>(dd_sample_id, centroid_XY, <span class="dt">by =</span> <span class="kw">c</span>(<span class="st">&quot;cellLabelInImage&quot;</span> =<span class="st"> &quot;group&quot;</span>))</a>
+<a class="sourceLine" id="cb28-33" data-line-number="33">    mibi_sample_id_list[[id]]<span class="op">$</span>centroid_X &lt;-<span class="st"> </span>dd_sample_id<span class="op">$</span>centroid_X</a>
+<a class="sourceLine" id="cb28-34" data-line-number="34">    mibi_sample_id_list[[id]]<span class="op">$</span>centroid_Y &lt;-<span class="st"> </span>dd_sample_id<span class="op">$</span>centroid_Y</a>
+<a class="sourceLine" id="cb28-35" data-line-number="35">}</a>
+<a class="sourceLine" id="cb28-36" data-line-number="36"></a>
+<a class="sourceLine" id="cb28-37" data-line-number="37">mibi_spa &lt;-<span class="st"> </span><span class="kw">cbind</span>(mibi_sample_id_list[[<span class="dv">1</span>]], mibi_sample_id_list[[<span class="dv">2</span>]])</a>
+<a class="sourceLine" id="cb28-38" data-line-number="38"><span class="cf">for</span>(id <span class="cf">in</span> <span class="dv">3</span><span class="op">:</span><span class="kw">length</span>(tiff_file_list)){</a>
+<a class="sourceLine" id="cb28-39" data-line-number="39">  </a>
+<a class="sourceLine" id="cb28-40" data-line-number="40"> mibi_spa &lt;-<span class="st"> </span><span class="kw">cbind</span>(mibi_spa, mibi_sample_id_list[[id]])</a>
+<a class="sourceLine" id="cb28-41" data-line-number="41">}</a>
+<a class="sourceLine" id="cb28-42" data-line-number="42"></a>
+<a class="sourceLine" id="cb28-43" data-line-number="43"><span class="kw">saveRDS</span>(mibi_spa, <span class="dt">file =</span> <span class="kw">paste0</span>(<span class="st">&quot;../Results/mibi_spa.rds&quot;</span>))</a></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1">mibi &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="st">&quot;mibi_spa.rds&quot;</span>)</a></code></pre></div>
+<p>Consider one DONOR from mibi</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb30-1" data-line-number="1">mibi &lt;-<span class="st"> </span>mibi[, mibi<span class="op">$</span>DONOR_NO <span class="op">%in%</span><span class="st"> &quot;30824&quot;</span>]</a>
+<a class="sourceLine" id="cb30-2" data-line-number="2">mibi</a>
+<a class="sourceLine" id="cb30-3" data-line-number="3"></a>
+<a class="sourceLine" id="cb30-4" data-line-number="4"><span class="co">#drop proteins(rows) with no expression in any of these cells</span></a>
+<a class="sourceLine" id="cb30-5" data-line-number="5">mibi &lt;-<span class="st"> </span>mibi[<span class="kw">rowSums</span>(<span class="kw">assay</span>(mibi)) <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span>, ]</a>
+<a class="sourceLine" id="cb30-6" data-line-number="6">mibi</a></code></pre></div>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb31-1" data-line-number="1"><span class="co">#drop proteins(rows) with no expression in any of these cells</span></a>
+<a class="sourceLine" id="cb31-2" data-line-number="2">cd45_sce &lt;-<span class="st"> </span>cd45_sce[<span class="kw">rowSums</span>(<span class="kw">assay</span>(cd45_sce)) <span class="op">&gt;</span><span class="st"> </span><span class="dv">0</span>, ]</a>
+<a class="sourceLine" id="cb31-3" data-line-number="3">cd45_sce</a></code></pre></div>
+</div>
+<div id="multiplicative-error-due-to-different-scales" class="section level1">
+<h1>Multiplicative error due to different scales</h1>
+<p>cd45_sce asinh transformation with cofactor 5</p>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb32-1" data-line-number="1">inv_func &lt;-<span class="st"> </span><span class="cf">function</span>(x) {</a>
+<a class="sourceLine" id="cb32-2" data-line-number="2">  <span class="dv">5</span><span class="op">*</span><span class="kw">sinh</span>(x)</a>
+<a class="sourceLine" id="cb32-3" data-line-number="3">}</a>
+<a class="sourceLine" id="cb32-4" data-line-number="4">cd45_sce_inv &lt;-<span class="st"> </span>cd45_sce</a>
+<a class="sourceLine" id="cb32-5" data-line-number="5"><span class="kw">rm</span>(cd45_sce)</a>
+<a class="sourceLine" id="cb32-6" data-line-number="6"><span class="kw">assay</span>(cd45_sce_inv) &lt;-<span class="st"> </span><span class="kw">inv_func</span>(<span class="kw">assay</span>(cd45_sce_inv))</a></code></pre></div>
+<div id="converting-each-scale-to-have-the-same-lower-and-upper-levels" class="section level2">
+<h2>Converting each scale to have the same lower and upper levels</h2>
+<p><span class="math inline">\(y = \left(\dfrac{x-x_{\text{min}}}{x_{\text{range}}}\right) \times u\)</span>, where <span class="math inline">\(u\)</span> is the upper limit of the rescaled variable.</p>
+<p>We will scale cd45 and mibi to upper limit of cd45</p>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb33-1" data-line-number="1">u &lt;-<span class="st"> </span><span class="kw">max</span>(<span class="kw">assay</span>(cd45_sce_inv))</a>
+<a class="sourceLine" id="cb33-2" data-line-number="2">x_mibi &lt;-<span class="st"> </span><span class="kw">assay</span>(mibi) </a>
+<a class="sourceLine" id="cb33-3" data-line-number="3">y_mibi &lt;-<span class="st"> </span><span class="kw">apply</span>(x_mibi, <span class="dv">1</span>, <span class="cf">function</span>(x){</a>
+<a class="sourceLine" id="cb33-4" data-line-number="4">  xmin &lt;-<span class="st"> </span><span class="kw">min</span>(x)</a>
+<a class="sourceLine" id="cb33-5" data-line-number="5">  xrange &lt;-<span class="st"> </span><span class="kw">max</span>(x) <span class="op">-</span><span class="st"> </span><span class="kw">min</span>(x)</a>
+<a class="sourceLine" id="cb33-6" data-line-number="6">  y &lt;-<span class="st"> </span>(x<span class="op">-</span>xmin)<span class="op">/</span>xrange<span class="op">*</span>u</a>
+<a class="sourceLine" id="cb33-7" data-line-number="7">  <span class="kw">return</span>(y)</a>
+<a class="sourceLine" id="cb33-8" data-line-number="8">})</a>
+<a class="sourceLine" id="cb33-9" data-line-number="9">y_mibi &lt;-<span class="st"> </span><span class="kw">t</span>(y_mibi)</a>
+<a class="sourceLine" id="cb33-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb33-11" data-line-number="11"><span class="co">#y_mibi[is.na(y_mibi)] &lt;- 0</span></a>
+<a class="sourceLine" id="cb33-12" data-line-number="12"><span class="kw">assay</span>(mibi) &lt;-<span class="st"> </span>y_mibi</a></code></pre></div>
+</div>
+</div>
+<div id="merge-two-singlecellexperiment-objects-and-make-mae" class="section level1">
+<h1>Merge two SingleCellExperiment objects and make mae</h1>
+<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb34-1" data-line-number="1"><span class="kw">source</span>(<span class="st">&quot;../R/makeMAEfromSCE.R&quot;</span>)</a>
+<a class="sourceLine" id="cb34-2" data-line-number="2">mae &lt;-<span class="st"> </span><span class="kw">makeMAEfromSCE</span>(<span class="dt">sce_list =</span> <span class="kw">list</span>(cd45_sce_inv, mibi), </a>
+<a class="sourceLine" id="cb34-3" data-line-number="3">                      <span class="dt">name_assays =</span> <span class="kw">c</span>(<span class="st">&quot;cd45&quot;</span>, <span class="st">&quot;mibi&quot;</span>),</a>
+<a class="sourceLine" id="cb34-4" data-line-number="4">                      <span class="dt">sampleID_name =</span> <span class="st">&quot;cell_ID&quot;</span>)</a>
+<a class="sourceLine" id="cb34-5" data-line-number="5">mae</a></code></pre></div>
+</div>
+<div id="join-the-assays-and-impute" class="section level1">
+<h1>Join the assays and impute</h1>
+<p>We already run this code, we read the imputed data</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb35-1" data-line-number="1">x1 &lt;-<span class="st"> </span><span class="kw">assay</span>(mae[[<span class="st">&quot;cd45&quot;</span>]]) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">t</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb35-2" data-line-number="2">x2 &lt;-<span class="st"> </span><span class="kw">assay</span>(mae[[<span class="st">&quot;mibi&quot;</span>]]) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">t</span>() <span class="op">%&gt;%</span><span class="st">  </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb35-3" data-line-number="3">x &lt;-<span class="st">  </span><span class="kw">full_join</span>(x1, x2)</a>
+<a class="sourceLine" id="cb35-4" data-line-number="4">markers &lt;-<span class="st"> </span><span class="kw">colnames</span>(x)</a>
+<a class="sourceLine" id="cb35-5" data-line-number="5">cells &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="kw">rownames</span>(x1), <span class="kw">rownames</span>(x2))</a>
+<a class="sourceLine" id="cb35-6" data-line-number="6">common_markers &lt;-<span class="st"> </span><span class="kw">colnames</span>(x1)[<span class="kw">colnames</span>(x1) <span class="op">%in%</span><span class="st"> </span><span class="kw">colnames</span>(x2)]</a>
+<a class="sourceLine" id="cb35-7" data-line-number="7">common_markers</a>
+<a class="sourceLine" id="cb35-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb35-9" data-line-number="9"></a>
+<a class="sourceLine" id="cb35-10" data-line-number="10"><span class="co"># some features are not recorded in one domain - impute data after scaling</span></a>
+<a class="sourceLine" id="cb35-11" data-line-number="11">colMissing &lt;-<span class="st"> </span><span class="kw">apply</span>(x, <span class="dv">2</span>, <span class="cf">function</span>(y){<span class="kw">mean</span>(<span class="kw">is.na</span>(y))})</a>
+<a class="sourceLine" id="cb35-12" data-line-number="12"></a>
+<a class="sourceLine" id="cb35-13" data-line-number="13">temp &lt;-<span class="st"> </span>x <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">as.matrix</span>() <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">t</span>()</a></code></pre></div>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1">imdata &lt;-<span class="st"> </span>impute<span class="op">::</span><span class="kw">impute.knn</span>(temp, <span class="dt">k=</span><span class="dv">5</span>, <span class="dt">rowmax =</span> <span class="fl">0.5</span>, <span class="dt">colmax =</span> <span class="fl">0.9</span>)<span class="op">$</span>data <span class="co"># temp is variables in the rows and samples in the columns</span></a>
+<a class="sourceLine" id="cb36-2" data-line-number="2"><span class="co"># x[is.na(x)] &lt;- 0</span></a>
+<a class="sourceLine" id="cb36-3" data-line-number="3"><span class="kw">saveRDS</span>(imdata, <span class="st">&quot;imdata_mibi_cytof_one.rds&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb37-1" data-line-number="1">imdata &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="st">&quot;imdata_mibi_cytof_one.rds&quot;</span>)</a>
+<a class="sourceLine" id="cb37-2" data-line-number="2">x &lt;-<span class="st"> </span>imdata <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">t</span>()</a>
+<a class="sourceLine" id="cb37-3" data-line-number="3"><span class="kw">rownames</span>(x) &lt;-<span class="st"> </span>cells</a></code></pre></div>
+</div>
+<div id="topic-modeling" class="section level1">
+<h1>Topic modeling</h1>
+<p>Consider test cells</p>
+<div class="sourceCode" id="cb38"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb38-1" data-line-number="1">test_samples &lt;-<span class="st"> </span><span class="kw">sample</span>(<span class="kw">rownames</span>(x2), <span class="dt">size =</span> <span class="kw">round</span>(<span class="kw">length</span>(<span class="kw">rownames</span>(x2))<span class="op">*</span><span class="fl">0.1</span>, <span class="dt">digits =</span> <span class="dv">0</span>))</a>
+<a class="sourceLine" id="cb38-2" data-line-number="2"><span class="kw">saveRDS</span>(test_samples, <span class="dt">file =</span> <span class="st">&quot;test_samples_one_mibi_one_cytof.rds&quot;</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb39-1" data-line-number="1">test_samples &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="st">&quot;test_samples_one_mibi_one_cytof.rds&quot;</span>)</a>
+<a class="sourceLine" id="cb39-2" data-line-number="2">x_test_train &lt;-<span class="st"> </span>x</a>
+<a class="sourceLine" id="cb39-3" data-line-number="3">x_test &lt;-<span class="st"> </span>x[test_samples, ]</a>
+<a class="sourceLine" id="cb39-4" data-line-number="4">x_test &lt;-<span class="st"> </span><span class="kw">apply</span>(x_test , <span class="kw">c</span>(<span class="dv">1</span>,<span class="dv">2</span>), <span class="cf">function</span>(y){<span class="kw">as.integer</span>(y)})</a>
+<a class="sourceLine" id="cb39-5" data-line-number="5">x_test &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(x_test)</a>
+<a class="sourceLine" id="cb39-6" data-line-number="6">mae_test &lt;-<span class="st"> </span>mae[, test_samples,]</a>
+<a class="sourceLine" id="cb39-7" data-line-number="7"></a>
+<a class="sourceLine" id="cb39-8" data-line-number="8">x_train &lt;-<span class="st"> </span>x[<span class="op">!</span>(<span class="kw">rownames</span>(x) <span class="op">%in%</span><span class="st"> </span>test_samples), ]</a>
+<a class="sourceLine" id="cb39-9" data-line-number="9">x_train &lt;-<span class="st"> </span><span class="kw">apply</span>(x_train , <span class="kw">c</span>(<span class="dv">1</span>,<span class="dv">2</span>), <span class="cf">function</span>(y){<span class="kw">as.integer</span>(y)})</a>
+<a class="sourceLine" id="cb39-10" data-line-number="10">x_train &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(x_train)</a>
+<a class="sourceLine" id="cb39-11" data-line-number="11">mae_train &lt;-<span class="st"> </span>mae[, <span class="kw">which</span>(<span class="op">!</span>(<span class="kw">rownames</span>(x) <span class="op">%in%</span><span class="st"> </span>test_samples)),]</a></code></pre></div>
+<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb40-1" data-line-number="1"><span class="co"># theta[d] ~ dirichlet(alpha), alpha pseudocount for each topic</span></a>
+<a class="sourceLine" id="cb40-2" data-line-number="2"><span class="co"># beta[k] ~ dirichlet(gamma), gamma pseudocount for each ASV in each topic</span></a>
+<a class="sourceLine" id="cb40-3" data-line-number="3">stan.data &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">K =</span> K, </a>
+<a class="sourceLine" id="cb40-4" data-line-number="4">  <span class="dt">V =</span> <span class="kw">ncol</span>(x_train), </a>
+<a class="sourceLine" id="cb40-5" data-line-number="5">  <span class="dt">D =</span> <span class="kw">nrow</span>(x_train), </a>
+<a class="sourceLine" id="cb40-6" data-line-number="6">  <span class="dt">n =</span> x_train, </a>
+<a class="sourceLine" id="cb40-7" data-line-number="7">  <span class="dt">alpha =</span> <span class="kw">rep</span>(.<span class="dv">8</span>, K), </a>
+<a class="sourceLine" id="cb40-8" data-line-number="8">  <span class="dt">gamma =</span> <span class="kw">rep</span>(.<span class="dv">5</span>, <span class="kw">ncol</span>(x_train))</a>
+<a class="sourceLine" id="cb40-9" data-line-number="9">)</a></code></pre></div>
+<div class="sourceCode" id="cb41"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb41-1" data-line-number="1">fileN &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;LDA_mibi_cytof_one_K_&quot;</span>,K,<span class="st">&quot;_ite_&quot;</span>,iter,<span class="st">&quot;.RData&quot;</span>)</a>
+<a class="sourceLine" id="cb41-2" data-line-number="2">fileN</a></code></pre></div>
+<div class="sourceCode" id="cb42"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb42-1" data-line-number="1">t1 &lt;-<span class="st"> </span><span class="kw">proc.time</span>()</a>
+<a class="sourceLine" id="cb42-2" data-line-number="2">stan.fit &lt;-<span class="st"> </span><span class="kw">stan</span>(<span class="dt">file =</span> <span class="st">&quot;./lda.stan&quot;</span>, </a>
+<a class="sourceLine" id="cb42-3" data-line-number="3">  <span class="dt">data =</span> stan.data, </a>
+<a class="sourceLine" id="cb42-4" data-line-number="4">  <span class="dt">iter =</span> iter, </a>
+<a class="sourceLine" id="cb42-5" data-line-number="5">  <span class="dt">chains =</span> <span class="dv">4</span>, </a>
+<a class="sourceLine" id="cb42-6" data-line-number="6">  <span class="dt">sample_file =</span> <span class="ot">NULL</span>,</a>
+<a class="sourceLine" id="cb42-7" data-line-number="7">  <span class="dt">diagnostic_file =</span> <span class="ot">NULL</span>,</a>
+<a class="sourceLine" id="cb42-8" data-line-number="8">  <span class="dt">cores =</span> <span class="dv">4</span>,</a>
+<a class="sourceLine" id="cb42-9" data-line-number="9">  <span class="dt">control =</span> <span class="kw">list</span>(<span class="dt">adapt_delta =</span> <span class="fl">0.9</span>),</a>
+<a class="sourceLine" id="cb42-10" data-line-number="10">  <span class="dt">save_dso =</span> <span class="ot">TRUE</span>,</a>
+<a class="sourceLine" id="cb42-11" data-line-number="11">  <span class="dt">algorithm =</span> <span class="st">&quot;NUTS&quot;</span>)</a>
+<a class="sourceLine" id="cb42-12" data-line-number="12"><span class="kw">proc.time</span>() <span class="op">-</span><span class="st"> </span>t1</a>
+<a class="sourceLine" id="cb42-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb42-14" data-line-number="14"><span class="kw">save</span>(stan.fit, <span class="dt">file =</span> fileN)</a></code></pre></div>
+<div class="sourceCode" id="cb43"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb43-1" data-line-number="1"><span class="kw">load</span>(<span class="dt">file =</span> fileN)</a></code></pre></div>
+<p>Sampler diagnostics</p>
+<div class="sourceCode" id="cb44"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb44-1" data-line-number="1">sampler_params &lt;-<span class="st"> </span><span class="kw">get_sampler_params</span>(stan.fit, </a>
+<a class="sourceLine" id="cb44-2" data-line-number="2">                                     <span class="dt">inc_warmup =</span> <span class="ot">FALSE</span>)</a>
+<a class="sourceLine" id="cb44-3" data-line-number="3"><span class="kw">colnames</span>(sampler_params[[<span class="dv">1</span>]])</a>
+<a class="sourceLine" id="cb44-4" data-line-number="4"></a>
+<a class="sourceLine" id="cb44-5" data-line-number="5">mean_accept_stat_by_chain &lt;-<span class="st"> </span><span class="kw">sapply</span>(sampler_params, </a>
+<a class="sourceLine" id="cb44-6" data-line-number="6">                                    <span class="cf">function</span>(x) <span class="kw">mean</span>(x[, <span class="st">&quot;accept_stat__&quot;</span>]))</a>
+<a class="sourceLine" id="cb44-7" data-line-number="7">mean_accept_stat_by_chain</a>
+<a class="sourceLine" id="cb44-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb44-9" data-line-number="9">max_treedepth_by_chain &lt;-<span class="st"> </span><span class="kw">sapply</span>(sampler_params, </a>
+<a class="sourceLine" id="cb44-10" data-line-number="10">                                 <span class="cf">function</span>(x) <span class="kw">max</span>(x[, <span class="st">&quot;treedepth__&quot;</span>]))</a>
+<a class="sourceLine" id="cb44-11" data-line-number="11">max_treedepth_by_chain</a></code></pre></div>
+</div>
+<div id="visualization" class="section level1">
+<h1>Visualization</h1>
+<div id="extract-posterior-samples" class="section level2">
+<h2>Extract posterior samples</h2>
+<div class="sourceCode" id="cb45"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb45-1" data-line-number="1">samples &lt;-<span class="st"> </span>rstan<span class="op">::</span><span class="kw">extract</span>(stan.fit, </a>
+<a class="sourceLine" id="cb45-2" data-line-number="2">                          <span class="dt">permuted =</span> <span class="ot">TRUE</span>, </a>
+<a class="sourceLine" id="cb45-3" data-line-number="3">                          <span class="dt">inc_warmup =</span> <span class="ot">FALSE</span>, </a>
+<a class="sourceLine" id="cb45-4" data-line-number="4">                          <span class="dt">include =</span> <span class="ot">TRUE</span>)<span class="co"># samples is a list</span></a></code></pre></div>
+</div>
+<div id="alignment" class="section level2">
+<h2>Alignment</h2>
+<ul>
+<li>Create a Topic <span class="math inline">\(*\)</span> Chain matrix</li>
+</ul>
+<div class="sourceCode" id="cb46"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb46-1" data-line-number="1"><span class="kw">source</span>(<span class="st">&quot;../R/alignmentMatrixMAE.R&quot;</span>)</a>
+<a class="sourceLine" id="cb46-2" data-line-number="2"><span class="kw">source</span>(<span class="st">&quot;../R/thetaAligned.R&quot;</span>)</a>
+<a class="sourceLine" id="cb46-3" data-line-number="3">theta &lt;-<span class="st"> </span>samples<span class="op">$</span>theta </a>
+<a class="sourceLine" id="cb46-4" data-line-number="4">aligned &lt;-<span class="st"> </span><span class="kw">alignmentMatrixMAE</span>(theta, </a>
+<a class="sourceLine" id="cb46-5" data-line-number="5">                           mae_train, </a>
+<a class="sourceLine" id="cb46-6" data-line-number="6">                           K, </a>
+<a class="sourceLine" id="cb46-7" data-line-number="7">                           <span class="dt">iter =</span> iter, </a>
+<a class="sourceLine" id="cb46-8" data-line-number="8">                           <span class="dt">chain =</span> <span class="dv">4</span>,</a>
+<a class="sourceLine" id="cb46-9" data-line-number="9">                           <span class="dt">SampleID_name =</span> <span class="st">&quot;cell_id&quot;</span>)</a>
+<a class="sourceLine" id="cb46-10" data-line-number="10">theta_aligned &lt;-<span class="st"> </span><span class="kw">thetaAligned</span>(theta, </a>
+<a class="sourceLine" id="cb46-11" data-line-number="11">                              K, </a>
+<a class="sourceLine" id="cb46-12" data-line-number="12">                              aligned, </a>
+<a class="sourceLine" id="cb46-13" data-line-number="13">                              <span class="dt">iter =</span> iter, </a>
+<a class="sourceLine" id="cb46-14" data-line-number="14">                              <span class="dt">chain =</span> <span class="dv">4</span>)</a>
+<a class="sourceLine" id="cb46-15" data-line-number="15"><span class="kw">dimnames</span>(theta_aligned)[[<span class="dv">2</span>]] &lt;-<span class="st"> </span>mae_train<span class="op">$</span>cell_id</a>
+<a class="sourceLine" id="cb46-16" data-line-number="16"><span class="kw">dimnames</span>(theta_aligned)[[<span class="dv">3</span>]] &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="kw">paste0</span>(<span class="st">&quot;Topic_&quot;</span>, <span class="kw">seq</span>(<span class="dv">1</span>,K)))</a>
+<a class="sourceLine" id="cb46-17" data-line-number="17"></a>
+<a class="sourceLine" id="cb46-18" data-line-number="18"><span class="co"># array to a dataframe</span></a>
+<a class="sourceLine" id="cb46-19" data-line-number="19">theta_all &lt;-<span class="st"> </span><span class="kw">melt</span>(theta_aligned)</a>
+<a class="sourceLine" id="cb46-20" data-line-number="20"><span class="kw">colnames</span>(theta_all) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;iteration&quot;</span>, <span class="st">&quot;Sample&quot;</span>, <span class="st">&quot;Topic&quot;</span>, <span class="st">&quot;topic.dis&quot;</span>)</a>
+<a class="sourceLine" id="cb46-21" data-line-number="21">theta_all<span class="op">$</span>Chain &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;Chain &quot;</span>, <span class="kw">rep</span>(<span class="kw">seq</span>(<span class="dv">1</span>, <span class="dv">4</span>), <span class="dt">each =</span> (iter<span class="op">/</span><span class="dv">2</span>)))</a>
+<a class="sourceLine" id="cb46-22" data-line-number="22"></a>
+<a class="sourceLine" id="cb46-23" data-line-number="23">sam &lt;-<span class="st"> </span><span class="kw">colData</span>(mae_train) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb46-24" data-line-number="24">theta_all<span class="op">$</span>Sample &lt;-<span class="st"> </span><span class="kw">as.character</span>(theta_all<span class="op">$</span>Sample)</a>
+<a class="sourceLine" id="cb46-25" data-line-number="25">theta_all &lt;-<span class="st"> </span><span class="kw">left_join</span>(theta_all, sam, <span class="dt">by =</span><span class="kw">c</span>(<span class="st">&quot;Sample&quot;</span>=<span class="st"> &quot;cell_id&quot;</span>))</a>
+<a class="sourceLine" id="cb46-26" data-line-number="26">theta_all<span class="op">$</span>Chain &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>Chain)</a>
+<a class="sourceLine" id="cb46-27" data-line-number="27">theta_all<span class="op">$</span>Topic &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>Topic)</a>
+<a class="sourceLine" id="cb46-28" data-line-number="28">theta_all<span class="op">$</span>Sample &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>Sample)</a>
+<a class="sourceLine" id="cb46-29" data-line-number="29"></a>
+<a class="sourceLine" id="cb46-30" data-line-number="30">theta_all<span class="op">$</span>cell_type &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>cell_type)</a>
+<a class="sourceLine" id="cb46-31" data-line-number="31">theta_all<span class="op">$</span>method &lt;-<span class="st"> </span><span class="kw">ifelse</span>(<span class="kw">is.na</span>(theta_all<span class="op">$</span>cell_type), <span class="st">&quot;cytof&quot;</span>, <span class="kw">as.character</span>(theta_all<span class="op">$</span>cell_type))</a></code></pre></div>
+<div class="sourceCode" id="cb47"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb47-1" data-line-number="1">manual_col &lt;-<span class="st"> </span><span class="kw">tableau_color_pal</span>(<span class="st">&quot;Classic 20&quot;</span>)(<span class="kw">length</span>(<span class="kw">unique</span>(theta_all<span class="op">$</span>method)))</a>
+<a class="sourceLine" id="cb47-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb47-3" data-line-number="3">theta_summary &lt;-<span class="st"> </span>theta_all <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb47-4" data-line-number="4"><span class="st">  </span><span class="kw">group_by</span>(Sample, Topic, method) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb47-5" data-line-number="5"><span class="st">  </span><span class="kw">summarize</span>(<span class="dt">median.topic.dis =</span> <span class="kw">median</span>(topic.dis)) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb47-6" data-line-number="6"><span class="st">  </span><span class="kw">ungroup</span>() <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb47-7" data-line-number="7"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">Topic =</span> <span class="kw">factor</span>(Topic, <span class="dt">levels =</span> <span class="kw">rev</span>(<span class="kw">str_c</span>(<span class="st">&quot;Topic_&quot;</span>,<span class="dv">1</span><span class="op">:</span>K))))</a>
+<a class="sourceLine" id="cb47-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb47-9" data-line-number="9"><span class="co">#theta_summary &lt;- dplyr::filter(theta_summary, cell_type %in% c(&quot;Macrophages&quot;, &quot;Tumor&quot;))</span></a>
+<a class="sourceLine" id="cb47-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb47-11" data-line-number="11">sample_cells &lt;-<span class="st"> </span><span class="kw">unique</span>(theta_summary<span class="op">$</span>Sample)</a>
+<a class="sourceLine" id="cb47-12" data-line-number="12">sample_cells_select &lt;-<span class="st"> </span><span class="kw">sample</span>(sample_cells, <span class="dv">100</span>)</a>
+<a class="sourceLine" id="cb47-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb47-14" data-line-number="14">theta_summary &lt;-<span class="st"> </span>dplyr<span class="op">::</span><span class="kw">filter</span>(theta_summary, </a>
+<a class="sourceLine" id="cb47-15" data-line-number="15">                               Sample <span class="op">%in%</span><span class="st"> </span>sample_cells_select)</a>
+<a class="sourceLine" id="cb47-16" data-line-number="16"></a>
+<a class="sourceLine" id="cb47-17" data-line-number="17">p &lt;-<span class="st"> </span><span class="kw">ggplot</span>(theta_summary, </a>
+<a class="sourceLine" id="cb47-18" data-line-number="18">           <span class="kw">aes</span>(<span class="dt">x =</span> method, </a>
+<a class="sourceLine" id="cb47-19" data-line-number="19">               <span class="dt">y =</span> Topic, </a>
+<a class="sourceLine" id="cb47-20" data-line-number="20">               <span class="dt">fill =</span> method))</a>
+<a class="sourceLine" id="cb47-21" data-line-number="21">p &lt;-<span class="st"> </span>p<span class="op">+</span></a>
+<a class="sourceLine" id="cb47-22" data-line-number="22"><span class="st">  </span><span class="kw">geom_tile</span>(<span class="kw">aes</span>(<span class="dt">alpha =</span> median.topic.dis))<span class="op">+</span></a>
+<a class="sourceLine" id="cb47-23" data-line-number="23"><span class="st">  </span><span class="kw">facet_grid</span>(.<span class="op">~</span>Sample, <span class="dt">scale =</span> <span class="st">&quot;free&quot;</span>)<span class="op">+</span></a>
+<a class="sourceLine" id="cb47-24" data-line-number="24"><span class="st">  </span><span class="kw">xlab</span>(<span class="st">&quot;method&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb47-25" data-line-number="25"><span class="st">  </span><span class="kw">scale_fill_manual</span>(<span class="dt">name =</span> <span class="st">&quot;method&quot;</span>, </a>
+<a class="sourceLine" id="cb47-26" data-line-number="26">                    <span class="dt">values =</span> manual_col) <span class="op">+</span></a>
+<a class="sourceLine" id="cb47-27" data-line-number="27"><span class="st">  </span><span class="kw">scale_alpha</span>(<span class="dt">name =</span> <span class="st">&quot;median topic distribution&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb47-28" data-line-number="28"><span class="st">  </span><span class="kw">theme_minimal</span>(<span class="dt">base_size =</span> <span class="dv">20</span>) <span class="op">+</span><span class="st">  </span></a>
+<a class="sourceLine" id="cb47-29" data-line-number="29"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>), </a>
+<a class="sourceLine" id="cb47-30" data-line-number="30">        <span class="dt">strip.text.x =</span> <span class="kw">element_text</span>(<span class="dt">angle =</span> <span class="dv">90</span>), </a>
+<a class="sourceLine" id="cb47-31" data-line-number="31">        <span class="dt">axis.text.x=</span><span class="kw">element_blank</span>()) </a>
+<a class="sourceLine" id="cb47-32" data-line-number="32">p</a>
+<a class="sourceLine" id="cb47-33" data-line-number="33"></a>
+<a class="sourceLine" id="cb47-34" data-line-number="34"><span class="co"># ggsave(paste0(&quot;topic_dis_mibi_cytof_one_K_&quot;,K, &quot;.png&quot;), p, width = 20, height = 6)</span></a></code></pre></div>
+</div>
+<div id="marker-distribution" class="section level2">
+<h2>Marker distribution</h2>
+<div class="sourceCode" id="cb48"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb48-1" data-line-number="1"><span class="kw">source</span>(<span class="st">&quot;../R/betaAligned.R&quot;</span>)</a>
+<a class="sourceLine" id="cb48-2" data-line-number="2">beta &lt;-<span class="st"> </span>samples<span class="op">$</span>beta <span class="co"># an array (iterations *topic * marker)</span></a>
+<a class="sourceLine" id="cb48-3" data-line-number="3">beta_aligned &lt;-<span class="st"> </span><span class="kw">betaAligned</span>(beta, </a>
+<a class="sourceLine" id="cb48-4" data-line-number="4">                            K, </a>
+<a class="sourceLine" id="cb48-5" data-line-number="5">                            aligned, </a>
+<a class="sourceLine" id="cb48-6" data-line-number="6">                            <span class="dt">iter =</span> iter, </a>
+<a class="sourceLine" id="cb48-7" data-line-number="7">                            <span class="dt">chain =</span> <span class="dv">4</span>) <span class="co"># an array (iterations *topic * ASV)</span></a>
+<a class="sourceLine" id="cb48-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb48-9" data-line-number="9"><span class="co"># array to data frame</span></a>
+<a class="sourceLine" id="cb48-10" data-line-number="10">beta_hat &lt;-<span class="st"> </span>beta_aligned <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb48-11" data-line-number="11"><span class="st">  </span><span class="kw">melt</span>(<span class="dt">varnames =</span> <span class="kw">c</span>(<span class="st">&quot;iterations&quot;</span>, <span class="st">&quot;topic&quot;</span>, <span class="st">&quot;marker_ix&quot;</span>), </a>
+<a class="sourceLine" id="cb48-12" data-line-number="12">       <span class="dt">value.name =</span> <span class="st">&quot;beta_h&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">as_tibble</span>()</a>
+<a class="sourceLine" id="cb48-13" data-line-number="13">beta_hat<span class="op">$</span>marker &lt;-<span class="st"> </span><span class="kw">colnames</span>(x_train)[beta_hat<span class="op">$</span>marker_ix]</a>
+<a class="sourceLine" id="cb48-14" data-line-number="14"></a>
+<a class="sourceLine" id="cb48-15" data-line-number="15"></a>
+<a class="sourceLine" id="cb48-16" data-line-number="16"><span class="co"># join rowData with beta_hat</span></a>
+<a class="sourceLine" id="cb48-17" data-line-number="17">marker_info &lt;-<span class="st"> </span><span class="kw">full_join</span>(<span class="kw">rowData</span>(mae_train[[<span class="st">&quot;cd45&quot;</span>]]) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>(), <span class="kw">rowData</span>(mae_train[[<span class="st">&quot;mibi&quot;</span>]]) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>())</a>
+<a class="sourceLine" id="cb48-18" data-line-number="18">marker_info<span class="op">$</span>marker &lt;-<span class="st"> </span>marker_info<span class="op">$</span>marker_name</a>
+<a class="sourceLine" id="cb48-19" data-line-number="19"></a>
+<a class="sourceLine" id="cb48-20" data-line-number="20"></a>
+<a class="sourceLine" id="cb48-21" data-line-number="21">beta_hat &lt;-<span class="st"> </span>beta_hat <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb48-22" data-line-number="22"><span class="st">  </span><span class="kw">left_join</span>(marker_info, <span class="dt">by =</span> <span class="st">&quot;marker&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">mutate</span>(<span class="dt">topic =</span> <span class="kw">paste</span>(<span class="st">&quot;Topic&quot;</span>, topic))</a>
+<a class="sourceLine" id="cb48-23" data-line-number="23"></a>
+<a class="sourceLine" id="cb48-24" data-line-number="24"></a>
+<a class="sourceLine" id="cb48-25" data-line-number="25">beta_hat<span class="op">$</span>marker &lt;-<span class="st"> </span><span class="kw">factor</span>(beta_hat<span class="op">$</span>marker)</a>
+<a class="sourceLine" id="cb48-26" data-line-number="26">beta_hat<span class="op">$</span>marker_ix &lt;-<span class="st"> </span><span class="kw">factor</span>(beta_hat<span class="op">$</span>marker_ix)</a>
+<a class="sourceLine" id="cb48-27" data-line-number="27">beta_hat<span class="op">$</span>topic &lt;-<span class="st"> </span><span class="kw">factor</span>(beta_hat<span class="op">$</span>topic)</a>
+<a class="sourceLine" id="cb48-28" data-line-number="28"></a>
+<a class="sourceLine" id="cb48-29" data-line-number="29"></a>
+<a class="sourceLine" id="cb48-30" data-line-number="30">beta_summary &lt;-<span class="st"> </span>beta_hat <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb48-31" data-line-number="31"><span class="st">  </span>dplyr<span class="op">::</span><span class="kw">group_by</span>(marker_ix, topic) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb48-32" data-line-number="32"><span class="st">  </span>dplyr<span class="op">::</span><span class="kw">summarise</span>(</a>
+<a class="sourceLine" id="cb48-33" data-line-number="33">    <span class="dt">marker =</span> marker[<span class="dv">1</span>],</a>
+<a class="sourceLine" id="cb48-34" data-line-number="34">    <span class="dt">beta_median =</span> <span class="kw">median</span>(beta_h),</a>
+<a class="sourceLine" id="cb48-35" data-line-number="35">    <span class="dt">marker =</span> marker[<span class="dv">1</span>],</a>
+<a class="sourceLine" id="cb48-36" data-line-number="36">    <span class="dt">hgnc_symbol =</span> hgnc_symbol[<span class="dv">1</span>]</a>
+<a class="sourceLine" id="cb48-37" data-line-number="37">  )</a>
+<a class="sourceLine" id="cb48-38" data-line-number="38"></a>
+<a class="sourceLine" id="cb48-39" data-line-number="39">beta_subset &lt;-<span class="st"> </span>beta_summary</a>
+<a class="sourceLine" id="cb48-40" data-line-number="40">beta_subset<span class="op">$</span>marker_ix &lt;-<span class="st"> </span><span class="kw">rep</span>(<span class="kw">seq_len</span>(<span class="kw">nrow</span>(beta_subset) <span class="op">/</span><span class="st"> </span>K), <span class="dt">each =</span> K)</a></code></pre></div>
+<div class="sourceCode" id="cb49"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb49-1" data-line-number="1">beta_subset &lt;-<span class="st"> </span>beta_subset <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb49-2" data-line-number="2"><span class="st">  </span><span class="kw">arrange</span>(marker_ix, topic)</a>
+<a class="sourceLine" id="cb49-3" data-line-number="3"></a>
+<a class="sourceLine" id="cb49-4" data-line-number="4">beta_subset &lt;-<span class="st"> </span>beta_subset <span class="op">%&gt;%</span></a>
+<a class="sourceLine" id="cb49-5" data-line-number="5"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">Class =</span> <span class="kw">factor</span>(marker, <span class="dt">levels =</span> <span class="kw">unique</span>(beta_subset<span class="op">$</span>marker)),</a>
+<a class="sourceLine" id="cb49-6" data-line-number="6">         <span class="dt">Topic =</span> <span class="kw">str_remove</span>(topic, <span class="st">&quot;Topic &quot;</span>))</a>
+<a class="sourceLine" id="cb49-7" data-line-number="7"></a>
+<a class="sourceLine" id="cb49-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb49-9" data-line-number="9">beta_subset<span class="op">$</span>Topic &lt;-<span class="st"> </span><span class="kw">factor</span>(beta_subset<span class="op">$</span>Topic, <span class="dt">levels =</span> <span class="kw">seq</span>(<span class="dv">1</span>,K) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">as.character</span>())</a>
+<a class="sourceLine" id="cb49-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb49-11" data-line-number="11">p &lt;-<span class="st"> </span><span class="kw">ggplot</span>(beta_subset, </a>
+<a class="sourceLine" id="cb49-12" data-line-number="12">            <span class="kw">aes</span>(<span class="dt">x =</span> Topic, </a>
+<a class="sourceLine" id="cb49-13" data-line-number="13">                <span class="dt">y =</span> marker, </a>
+<a class="sourceLine" id="cb49-14" data-line-number="14">                <span class="dt">fill =</span> beta_median)) <span class="op">+</span></a>
+<a class="sourceLine" id="cb49-15" data-line-number="15"><span class="st">  </span><span class="kw">geom_tile</span>() <span class="op">+</span></a>
+<a class="sourceLine" id="cb49-16" data-line-number="16"><span class="st">  </span><span class="kw">ylab</span>(<span class="st">&quot;Marker&quot;</span>)<span class="op">+</span></a>
+<a class="sourceLine" id="cb49-17" data-line-number="17"><span class="st">  </span><span class="kw">scale_fill_gradientn</span>(<span class="dt">name =</span> <span class="st">&quot;Median ASV distribution&quot;</span>, </a>
+<a class="sourceLine" id="cb49-18" data-line-number="18">                       <span class="dt">colours =</span> <span class="kw">c</span>(<span class="st">&quot;gray98&quot;</span>, <span class="st">&quot;dodgerblue&quot;</span>)) <span class="op">+</span><span class="st">  </span></a>
+<a class="sourceLine" id="cb49-19" data-line-number="19"><span class="st">  </span><span class="kw">theme_minimal</span>(<span class="dt">base_size =</span> <span class="dv">20</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb49-20" data-line-number="20"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>)) </a>
+<a class="sourceLine" id="cb49-21" data-line-number="21"></a>
+<a class="sourceLine" id="cb49-22" data-line-number="22">p</a>
+<a class="sourceLine" id="cb49-23" data-line-number="23"><span class="co"># ggsave(paste0(&quot;asv_dist_barplot_mibi_cytof_one_K_&quot;,K, &quot;.png&quot;), p, width = 13, height = 11)</span></a></code></pre></div>
+</div>
+</div>
+<div id="computing-statistics-after-alignment" class="section level1">
+<h1>Computing statistics after alignment</h1>
+<p>Here we use all 2000 iterations</p>
+</div>
+<div id="log-posterior-on-the-test-data" class="section level1">
+<h1>Log posterior on the test data</h1>
+<div class="sourceCode" id="cb50"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb50-1" data-line-number="1"><span class="kw">dimnames</span>(x_test) =<span class="st"> </span><span class="ot">NULL</span></a>
+<a class="sourceLine" id="cb50-2" data-line-number="2">test_data =<span class="st"> </span><span class="kw">list</span>(<span class="dt">K =</span> K,</a>
+<a class="sourceLine" id="cb50-3" data-line-number="3">  <span class="dt">V =</span> <span class="kw">ncol</span>(x_test),</a>
+<a class="sourceLine" id="cb50-4" data-line-number="4">  <span class="dt">D =</span> <span class="kw">nrow</span>(x_test),</a>
+<a class="sourceLine" id="cb50-5" data-line-number="5">  <span class="dt">n =</span> x_test,</a>
+<a class="sourceLine" id="cb50-6" data-line-number="6">  <span class="dt">alpha =</span> <span class="kw">rep</span>(.<span class="dv">8</span>, K),</a>
+<a class="sourceLine" id="cb50-7" data-line-number="7">  <span class="dt">gamma =</span> <span class="kw">rep</span>(.<span class="dv">5</span>, <span class="kw">ncol</span>(x_test))</a>
+<a class="sourceLine" id="cb50-8" data-line-number="8">)</a>
+<a class="sourceLine" id="cb50-9" data-line-number="9"></a>
+<a class="sourceLine" id="cb50-10" data-line-number="10">log_lik_total_for_each_iteration &lt;-<span class="st"> </span><span class="kw">numeric</span>()</a>
+<a class="sourceLine" id="cb50-11" data-line-number="11"><span class="cf">for</span>(it <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span>((iter<span class="op">/</span><span class="dv">2</span>)<span class="op">*</span><span class="dv">4</span>)){</a>
+<a class="sourceLine" id="cb50-12" data-line-number="12">  log_lik &lt;-<span class="st"> </span><span class="kw">numeric</span>()</a>
+<a class="sourceLine" id="cb50-13" data-line-number="13">    <span class="cf">for</span>(j <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">dim</span>(x_test)[<span class="dv">1</span>]){<span class="co"># For each sample j in the test set</span></a>
+<a class="sourceLine" id="cb50-14" data-line-number="14">      theta_aligned_sim &lt;-<span class="st"> </span><span class="kw">rdirichlet</span>(<span class="dv">1</span>, test_data<span class="op">$</span>alpha)<span class="co"># simulate topic distribution from prior distribution</span></a>
+<a class="sourceLine" id="cb50-15" data-line-number="15">      p_vec_pos &lt;-<span class="st"> </span><span class="kw">as.matrix</span>(<span class="kw">t</span>(beta_aligned[it, , ])) <span class="op">%*%</span><span class="st"> </span><span class="kw">matrix</span>(theta_aligned_sim, <span class="dt">nrow =</span> K, <span class="dt">byrow =</span> T)</a>
+<a class="sourceLine" id="cb50-16" data-line-number="16">      </a>
+<a class="sourceLine" id="cb50-17" data-line-number="17">      log_lik[j] &lt;-<span class="st"> </span><span class="kw">dmultinom</span>(x_test[j, ], <span class="dt">size =</span> <span class="kw">sum</span>(x_test[j, ]), <span class="dt">prob =</span> p_vec_pos, <span class="dt">log =</span> <span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb50-18" data-line-number="18">    }</a>
+<a class="sourceLine" id="cb50-19" data-line-number="19">  log_lik_total_for_each_iteration[it] &lt;-<span class="st"> </span><span class="kw">sum</span>(log_lik)</a>
+<a class="sourceLine" id="cb50-20" data-line-number="20">}</a>
+<a class="sourceLine" id="cb50-21" data-line-number="21"></a>
+<a class="sourceLine" id="cb50-22" data-line-number="22"></a>
+<a class="sourceLine" id="cb50-23" data-line-number="23">df_lp_corrected &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">lp =</span> log_lik_total_for_each_iteration, </a>
+<a class="sourceLine" id="cb50-24" data-line-number="24">                             <span class="dt">Chain =</span> <span class="kw">paste0</span>(<span class="st">&quot;Chain &quot;</span>, <span class="kw">rep</span>(<span class="kw">seq_len</span>(<span class="dv">4</span>), <span class="dt">each =</span> (iter<span class="op">/</span><span class="dv">2</span>))))</a>
+<a class="sourceLine" id="cb50-25" data-line-number="25"></a>
+<a class="sourceLine" id="cb50-26" data-line-number="26">fileN &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;df_lp_test_mibi_cytof_one_K_&quot;</span>, K, <span class="st">&quot;.rds&quot;</span>)</a>
+<a class="sourceLine" id="cb50-27" data-line-number="27"><span class="kw">saveRDS</span>(df_lp_corrected, fileN)</a></code></pre></div>
+<div class="sourceCode" id="cb51"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb51-1" data-line-number="1">df_lp_corrected_all_K &lt;-<span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb51-2" data-line-number="2"><span class="cf">for</span>(top <span class="cf">in</span> <span class="kw">c</span>(<span class="dv">3</span><span class="op">:</span><span class="dv">5</span>, <span class="dv">15</span>,<span class="dv">20</span>)){</a>
+<a class="sourceLine" id="cb51-3" data-line-number="3">  fileN &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;df_lp_test_mibi_cytof_one_K_&quot;</span>, top, <span class="st">&quot;.rds&quot;</span>)</a>
+<a class="sourceLine" id="cb51-4" data-line-number="4">  df_lp_corrected &lt;-<span class="st"> </span><span class="kw">readRDS</span>(fileN)</a>
+<a class="sourceLine" id="cb51-5" data-line-number="5">  df_lp_corrected<span class="op">$</span>Num_Topic &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;T=&quot;</span>, <span class="kw">rep</span>(top, <span class="kw">dim</span>(df_lp_corrected)[<span class="dv">1</span>]))</a>
+<a class="sourceLine" id="cb51-6" data-line-number="6">  df_lp_corrected_all_K &lt;-<span class="st"> </span><span class="kw">rbind</span>(df_lp_corrected_all_K, df_lp_corrected)</a>
+<a class="sourceLine" id="cb51-7" data-line-number="7">}</a>
+<a class="sourceLine" id="cb51-8" data-line-number="8"></a>
+<a class="sourceLine" id="cb51-9" data-line-number="9">df_lp_corrected_all_K<span class="op">$</span>Num_Topic &lt;-<span class="st"> </span><span class="kw">factor</span>(df_lp_corrected_all_K<span class="op">$</span>Num_Topic, <span class="dt">levels =</span> <span class="kw">c</span>(<span class="kw">paste0</span>(<span class="st">&quot;T=&quot;</span>, <span class="kw">c</span>(<span class="kw">seq</span>(<span class="dv">3</span>, <span class="dv">5</span>), <span class="dv">15</span>, <span class="dv">20</span>))</a>
+<a class="sourceLine" id="cb51-10" data-line-number="10">))</a>
+<a class="sourceLine" id="cb51-11" data-line-number="11"></a>
+<a class="sourceLine" id="cb51-12" data-line-number="12">p &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="dt">data =</span> df_lp_corrected_all_K) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb51-13" data-line-number="13"><span class="st">  </span><span class="kw">geom_boxplot</span>(<span class="kw">aes</span>(<span class="dt">x =</span> Num_Topic, <span class="dt">y =</span> lp)) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb51-14" data-line-number="14"><span class="st">  </span><span class="kw">ylab</span>(<span class="st">&quot;Predictive log-likelihood in test data&quot;</span>) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb51-15" data-line-number="15"><span class="st">  </span><span class="kw">xlab</span>(<span class="st">&quot;Number of topics&quot;</span>)</a>
+<a class="sourceLine" id="cb51-16" data-line-number="16"></a>
+<a class="sourceLine" id="cb51-17" data-line-number="17">p</a>
+<a class="sourceLine" id="cb51-18" data-line-number="18"><span class="co"># ggsave(&quot;lp_test_mibi_cytof_one.png&quot;, p, width = 7, height = 4)</span></a></code></pre></div>
+</div>
+<div id="convergence-diagnostics" class="section level1">
+<h1>Convergence diagnostics</h1>
+<p>Compute <span class="math inline">\(\hat{R}\)</span></p>
+<p>These <span class="math inline">\(\hat{R}\)</span> based on 100 iterations</p>
+<div class="sourceCode" id="cb52"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb52-1" data-line-number="1">Rhat_theta &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">nrow =</span> <span class="kw">dim</span>(theta_aligned)[<span class="dv">2</span>], <span class="dt">ncol =</span> <span class="kw">dim</span>(theta_aligned)[<span class="dv">3</span>])</a>
+<a class="sourceLine" id="cb52-2" data-line-number="2">ESS_bulk_theta &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">nrow =</span> <span class="kw">dim</span>(theta_aligned)[<span class="dv">2</span>], <span class="dt">ncol =</span> <span class="kw">dim</span>(theta_aligned)[<span class="dv">3</span>])</a>
+<a class="sourceLine" id="cb52-3" data-line-number="3">ESS_tail_theta &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">nrow =</span> <span class="kw">dim</span>(theta_aligned)[<span class="dv">2</span>], <span class="dt">ncol =</span> <span class="kw">dim</span>(theta_aligned)[<span class="dv">3</span>])</a>
+<a class="sourceLine" id="cb52-4" data-line-number="4"><span class="cf">for</span>(sam <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">dim</span>(theta_aligned)[<span class="dv">2</span>]){</a>
+<a class="sourceLine" id="cb52-5" data-line-number="5">  <span class="cf">for</span>(top <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">dim</span>(theta_aligned)[<span class="dv">3</span>]){</a>
+<a class="sourceLine" id="cb52-6" data-line-number="6">    sims_theta &lt;-<span class="st"> </span><span class="kw">matrix</span>(theta_aligned[ ,sam , top], <span class="dt">nrow =</span> (iter<span class="op">/</span><span class="dv">2</span>), <span class="dt">ncol =</span> <span class="dv">4</span>, <span class="dt">byrow =</span> <span class="ot">FALSE</span>)</a>
+<a class="sourceLine" id="cb52-7" data-line-number="7">    Rhat_theta[sam, top] &lt;-<span class="st"> </span><span class="kw">Rhat</span>(sims_theta)</a>
+<a class="sourceLine" id="cb52-8" data-line-number="8">    ESS_bulk_theta[sam, top] &lt;-<span class="st"> </span><span class="kw">ess_bulk</span>(sims_theta)</a>
+<a class="sourceLine" id="cb52-9" data-line-number="9">    ESS_tail_theta[sam, top] &lt;-<span class="st"> </span><span class="kw">ess_tail</span>(sims_theta)</a>
+<a class="sourceLine" id="cb52-10" data-line-number="10">  }</a>
+<a class="sourceLine" id="cb52-11" data-line-number="11">  </a>
+<a class="sourceLine" id="cb52-12" data-line-number="12">}</a>
+<a class="sourceLine" id="cb52-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb52-14" data-line-number="14">Rhat_theta &lt;-<span class="st"> </span><span class="kw">as.vector</span>(Rhat_theta)</a>
+<a class="sourceLine" id="cb52-15" data-line-number="15">ESS_bulk_theta &lt;-<span class="st"> </span><span class="kw">as.vector</span>(ESS_bulk_theta)</a>
+<a class="sourceLine" id="cb52-16" data-line-number="16">ESS_tail_theta &lt;-<span class="st"> </span><span class="kw">as.vector</span>(ESS_tail_theta)</a>
+<a class="sourceLine" id="cb52-17" data-line-number="17"></a>
+<a class="sourceLine" id="cb52-18" data-line-number="18">Rhat_beta &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">nrow =</span> <span class="kw">dim</span>(beta_aligned)[<span class="dv">2</span>], <span class="dt">ncol =</span> <span class="kw">dim</span>(beta_aligned)[<span class="dv">3</span>])</a>
+<a class="sourceLine" id="cb52-19" data-line-number="19">ESS_bulk_beta &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">nrow =</span> <span class="kw">dim</span>(beta_aligned)[<span class="dv">2</span>], <span class="dt">ncol =</span> <span class="kw">dim</span>(beta_aligned)[<span class="dv">3</span>])</a>
+<a class="sourceLine" id="cb52-20" data-line-number="20">ESS_tail_beta &lt;-<span class="st"> </span><span class="kw">matrix</span>(<span class="dt">nrow =</span> <span class="kw">dim</span>(beta_aligned)[<span class="dv">2</span>], <span class="dt">ncol =</span> <span class="kw">dim</span>(beta_aligned)[<span class="dv">3</span>])</a>
+<a class="sourceLine" id="cb52-21" data-line-number="21">  </a>
+<a class="sourceLine" id="cb52-22" data-line-number="22"><span class="cf">for</span>(top <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">dim</span>(beta_aligned)[<span class="dv">2</span>]){</a>
+<a class="sourceLine" id="cb52-23" data-line-number="23">    <span class="cf">for</span>(fea <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">dim</span>(beta_aligned)[<span class="dv">3</span>]){</a>
+<a class="sourceLine" id="cb52-24" data-line-number="24">      sims_beta &lt;-<span class="st"> </span><span class="kw">matrix</span>(beta_aligned[ , top, fea], <span class="dt">nrow =</span> (iter<span class="op">/</span><span class="dv">2</span>), <span class="dt">ncol =</span> <span class="dv">4</span>, <span class="dt">byrow =</span> <span class="ot">FALSE</span>)</a>
+<a class="sourceLine" id="cb52-25" data-line-number="25">      Rhat_beta[top, fea] &lt;-<span class="st"> </span><span class="kw">Rhat</span>(sims_beta)</a>
+<a class="sourceLine" id="cb52-26" data-line-number="26">      ESS_bulk_beta[top, fea] &lt;-<span class="st"> </span><span class="kw">ess_bulk</span>(sims_beta)</a>
+<a class="sourceLine" id="cb52-27" data-line-number="27">      ESS_tail_beta[top, fea] &lt;-<span class="st"> </span><span class="kw">ess_tail</span>(sims_beta)</a>
+<a class="sourceLine" id="cb52-28" data-line-number="28">    }</a>
+<a class="sourceLine" id="cb52-29" data-line-number="29">  </a>
+<a class="sourceLine" id="cb52-30" data-line-number="30">}</a>
+<a class="sourceLine" id="cb52-31" data-line-number="31"></a>
+<a class="sourceLine" id="cb52-32" data-line-number="32">Rhat_beta &lt;-<span class="st"> </span><span class="kw">as.vector</span>(Rhat_beta)</a>
+<a class="sourceLine" id="cb52-33" data-line-number="33">ESS_bulk_beta &lt;-<span class="st"> </span><span class="kw">as.vector</span>(ESS_bulk_beta)</a>
+<a class="sourceLine" id="cb52-34" data-line-number="34">ESS_tail_beta &lt;-<span class="st"> </span><span class="kw">as.vector</span>(ESS_tail_beta)</a>
+<a class="sourceLine" id="cb52-35" data-line-number="35"></a>
+<a class="sourceLine" id="cb52-36" data-line-number="36">Rhat &lt;-<span class="st"> </span><span class="kw">c</span>(Rhat_theta, Rhat_beta)</a>
+<a class="sourceLine" id="cb52-37" data-line-number="37"><span class="co"># fileN &lt;- paste0(&quot;Rhat_mibi_cytof_one_K_&quot;,K, &quot;.rds&quot;)</span></a>
+<a class="sourceLine" id="cb52-38" data-line-number="38"><span class="co"># saveRDS(Rhat, fileN)</span></a>
+<a class="sourceLine" id="cb52-39" data-line-number="39"></a>
+<a class="sourceLine" id="cb52-40" data-line-number="40">ESS_bulk &lt;-<span class="st"> </span><span class="kw">c</span>(ESS_bulk_theta, ESS_bulk_beta)</a>
+<a class="sourceLine" id="cb52-41" data-line-number="41"><span class="co"># fileN &lt;- paste0(&quot;ESS_bulk_mibi_cytof_one_K_&quot;,K, &quot;.rds&quot;)</span></a>
+<a class="sourceLine" id="cb52-42" data-line-number="42"><span class="co"># saveRDS(ESS_bulk, fileN)</span></a>
+<a class="sourceLine" id="cb52-43" data-line-number="43"></a>
+<a class="sourceLine" id="cb52-44" data-line-number="44">ESS_tail &lt;-<span class="st"> </span><span class="kw">c</span>(ESS_tail_theta, ESS_tail_beta)</a>
+<a class="sourceLine" id="cb52-45" data-line-number="45"><span class="co"># fileN &lt;- paste0(&quot;ESS_tail_mibi_cytof_one_K_&quot;,K, &quot;.rds&quot;)</span></a>
+<a class="sourceLine" id="cb52-46" data-line-number="46"><span class="co"># saveRDS(ESS_tail, fileN)</span></a>
+<a class="sourceLine" id="cb52-47" data-line-number="47"></a>
+<a class="sourceLine" id="cb52-48" data-line-number="48"><span class="co"># R hat ~ 1.05</span></a>
+<a class="sourceLine" id="cb52-49" data-line-number="49">p_rhat &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="kw">data.frame</span>(<span class="dt">Rhat =</span> Rhat)) <span class="op">+</span></a>
+<a class="sourceLine" id="cb52-50" data-line-number="50"><span class="st">  </span><span class="kw">geom_histogram</span>(<span class="kw">aes</span>(<span class="dt">x =</span> Rhat), </a>
+<a class="sourceLine" id="cb52-51" data-line-number="51">                 <span class="dt">fill =</span> <span class="st">&quot;lavender&quot;</span>, </a>
+<a class="sourceLine" id="cb52-52" data-line-number="52">                 <span class="dt">colour =</span> <span class="st">&quot;black&quot;</span>, </a>
+<a class="sourceLine" id="cb52-53" data-line-number="53">                 <span class="dt">bins =</span> <span class="dv">100</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb52-54" data-line-number="54"><span class="st">  </span><span class="kw">theme_minimal</span>(<span class="dt">base_size =</span> <span class="dv">20</span>) <span class="op">+</span><span class="st">  </span></a>
+<a class="sourceLine" id="cb52-55" data-line-number="55"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>))  <span class="op">+</span></a>
+<a class="sourceLine" id="cb52-56" data-line-number="56"><span class="st">  </span><span class="kw">theme_minimal</span>(<span class="dt">base_size =</span> <span class="dv">20</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb52-57" data-line-number="57"><span class="st">  </span><span class="kw">xlab</span>(<span class="st">&quot;&quot;</span>)</a>
+<a class="sourceLine" id="cb52-58" data-line-number="58">p_rhat</a>
+<a class="sourceLine" id="cb52-59" data-line-number="59"></a>
+<a class="sourceLine" id="cb52-60" data-line-number="60"></a>
+<a class="sourceLine" id="cb52-61" data-line-number="61"><span class="co"># ggsave(paste0(&quot;/Rhat_mibi_cytof_one_K_&quot;,K, &quot;.png&quot;), p_rhat, width = 9, height = 6)</span></a></code></pre></div>
+<p>Compute ESS</p>
+<div class="sourceCode" id="cb53"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb53-1" data-line-number="1"><span class="co"># ESS bulk and ESS tail at least 100 per Markov Chain in order to be reliable and indicate that estimates of respective posterior quantiles are reliable</span></a>
+<a class="sourceLine" id="cb53-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb53-3" data-line-number="3">p_ess_bulk &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="kw">data.frame</span>(<span class="dt">ESS_bulk =</span> ESS_bulk)) <span class="op">+</span></a>
+<a class="sourceLine" id="cb53-4" data-line-number="4"><span class="st">  </span><span class="kw">geom_histogram</span>(<span class="kw">aes</span>(<span class="dt">x =</span> ESS_bulk), </a>
+<a class="sourceLine" id="cb53-5" data-line-number="5">                 <span class="dt">fill =</span> <span class="st">&quot;lavender&quot;</span>, </a>
+<a class="sourceLine" id="cb53-6" data-line-number="6">                 <span class="dt">colour =</span> <span class="st">&quot;black&quot;</span>, </a>
+<a class="sourceLine" id="cb53-7" data-line-number="7">                 <span class="dt">bins =</span> <span class="dv">100</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb53-8" data-line-number="8"><span class="st">  </span><span class="kw">theme_minimal</span>(<span class="dt">base_size =</span> <span class="dv">20</span>) <span class="op">+</span><span class="st">  </span></a>
+<a class="sourceLine" id="cb53-9" data-line-number="9"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>))   <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb53-10" data-line-number="10"><span class="st">  </span><span class="kw">theme_minimal</span>(<span class="dt">base_size =</span> <span class="dv">20</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb53-11" data-line-number="11"><span class="st">  </span><span class="kw">xlab</span>(<span class="st">&quot;&quot;</span>)</a>
+<a class="sourceLine" id="cb53-12" data-line-number="12"></a>
+<a class="sourceLine" id="cb53-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb53-14" data-line-number="14">p_ess_bulk</a>
+<a class="sourceLine" id="cb53-15" data-line-number="15"></a>
+<a class="sourceLine" id="cb53-16" data-line-number="16"><span class="co"># ggsave(paste0(&quot;ess_bulk_mibi_cytof_one_K_&quot;,K, &quot;.png&quot;), p_ess_bulk, width = 9, height = 6)</span></a>
+<a class="sourceLine" id="cb53-17" data-line-number="17"></a>
+<a class="sourceLine" id="cb53-18" data-line-number="18">p_ess_tail &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="kw">data.frame</span>(<span class="dt">ESS_tail =</span> ESS_tail)) <span class="op">+</span></a>
+<a class="sourceLine" id="cb53-19" data-line-number="19"><span class="st">  </span><span class="kw">geom_histogram</span>(<span class="kw">aes</span>(<span class="dt">x =</span> ESS_tail), </a>
+<a class="sourceLine" id="cb53-20" data-line-number="20">                 <span class="dt">fill =</span> <span class="st">&quot;lavender&quot;</span>, </a>
+<a class="sourceLine" id="cb53-21" data-line-number="21">                 <span class="dt">colour =</span> <span class="st">&quot;black&quot;</span>, </a>
+<a class="sourceLine" id="cb53-22" data-line-number="22">                 <span class="dt">bins =</span> <span class="dv">100</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb53-23" data-line-number="23"><span class="st">  </span><span class="kw">theme_minimal</span>(<span class="dt">base_size =</span> <span class="dv">20</span>) <span class="op">+</span><span class="st">  </span></a>
+<a class="sourceLine" id="cb53-24" data-line-number="24"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>))</a>
+<a class="sourceLine" id="cb53-25" data-line-number="25"></a>
+<a class="sourceLine" id="cb53-26" data-line-number="26">p_ess_tail</a>
+<a class="sourceLine" id="cb53-27" data-line-number="27"><span class="co"># ggsave(paste0(&quot;ess_tail_mibi_cytof_one_K_&quot;,K, &quot;.png&quot;), p_ess_tail, width = 9, height = 6)</span></a></code></pre></div>
+</div>
+<div id="model-assesment-on-simulated-data" class="section level1">
+<h1>Model assesment on simulated data</h1>
+<div class="sourceCode" id="cb54"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb54-1" data-line-number="1"><span class="co"># Simulated data</span></a>
+<a class="sourceLine" id="cb54-2" data-line-number="2">x_sim &lt;-<span class="st"> </span>samples<span class="op">$</span>x_sim <span class="co"># iteration * samples * ASVs</span></a>
+<a class="sourceLine" id="cb54-3" data-line-number="3"><span class="co"># Choose only the first chain</span></a>
+<a class="sourceLine" id="cb54-4" data-line-number="4">x_sim &lt;-<span class="st"> </span>x_sim[<span class="dv">1</span><span class="op">:</span>(iter<span class="op">/</span><span class="dv">2</span>), ,] <span class="co"># For each iteration, simulated data is x_sim[i, ,]</span></a>
+<a class="sourceLine" id="cb54-5" data-line-number="5">x_med_asv &lt;-<span class="st"> </span><span class="kw">apply</span>(x <span class="op">%&gt;%</span><span class="st"> </span>data.frame , <span class="dv">2</span>, median)</a>
+<a class="sourceLine" id="cb54-6" data-line-number="6">sim_ite &lt;-<span class="st"> </span><span class="kw">dim</span>(x_sim)[<span class="dv">1</span>]</a>
+<a class="sourceLine" id="cb54-7" data-line-number="7">ite_plot &lt;-<span class="st"> </span><span class="dv">19</span><span class="co"># or ite_plot &lt;- sim_ite</span></a>
+<a class="sourceLine" id="cb54-8" data-line-number="8"><span class="co">#Find maximum of each asv for each iteration</span></a>
+<a class="sourceLine" id="cb54-9" data-line-number="9">med_all &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">x_med_asv =</span> x_med_asv)</a>
+<a class="sourceLine" id="cb54-10" data-line-number="10"><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span>ite_plot){</a>
+<a class="sourceLine" id="cb54-11" data-line-number="11">  x_sim_i &lt;-<span class="st"> </span>x_sim[i, ,]</a>
+<a class="sourceLine" id="cb54-12" data-line-number="12">  med_x_sim_i &lt;-<span class="st"> </span><span class="kw">apply</span>(x_sim_i <span class="op">%&gt;%</span><span class="st"> </span>data.frame , <span class="dv">2</span>, median)</a>
+<a class="sourceLine" id="cb54-13" data-line-number="13">  med_all &lt;-<span class="st"> </span><span class="kw">cbind</span>(med_all, med_x_sim_i)</a>
+<a class="sourceLine" id="cb54-14" data-line-number="14">}</a>
+<a class="sourceLine" id="cb54-15" data-line-number="15"></a>
+<a class="sourceLine" id="cb54-16" data-line-number="16"><span class="kw">colnames</span>(med_all) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;x_med_asv&quot;</span>, <span class="kw">paste0</span>(<span class="st">&quot;x_med_sim_1&quot;</span>, <span class="kw">seq</span>(<span class="dv">1</span>, ite_plot)))</a>
+<a class="sourceLine" id="cb54-17" data-line-number="17">avg_med_square &lt;-<span class="st"> </span><span class="kw">numeric</span>()</a>
+<a class="sourceLine" id="cb54-18" data-line-number="18"></a>
+<a class="sourceLine" id="cb54-19" data-line-number="19"><span class="co"># histogram of maximum</span></a>
+<a class="sourceLine" id="cb54-20" data-line-number="20">med_all_long &lt;-<span class="st"> </span><span class="kw">melt</span>(med_all)</a>
+<a class="sourceLine" id="cb54-21" data-line-number="21">med_all_long<span class="op">$</span>type &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="kw">rep</span>(<span class="st">&quot;observed&quot;</span>, <span class="kw">dim</span>(x_sim)[<span class="dv">3</span>]), <span class="kw">rep</span>(<span class="st">&quot;simulated&quot;</span>, <span class="kw">dim</span>(x_sim)[<span class="dv">3</span>]<span class="op">*</span>(ite_plot)))</a>
+<a class="sourceLine" id="cb54-22" data-line-number="22">med_all_long<span class="op">$</span>type &lt;-<span class="st"> </span><span class="kw">factor</span>(med_all_long<span class="op">$</span>type)</a>
+<a class="sourceLine" id="cb54-23" data-line-number="23">p_hist_obs_sim &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="dt">data =</span> med_all_long) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb54-24" data-line-number="24"><span class="st">  </span><span class="kw">geom_histogram</span>(<span class="kw">aes</span>(<span class="dt">x =</span> value, <span class="dt">group =</span> variable, <span class="dt">fill =</span> type), </a>
+<a class="sourceLine" id="cb54-25" data-line-number="25">                 <span class="dt">colour =</span> <span class="st">&quot;black&quot;</span>,</a>
+<a class="sourceLine" id="cb54-26" data-line-number="26">                 <span class="dt">bins =</span> <span class="dv">100</span>) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb54-27" data-line-number="27"><span class="st">  </span><span class="kw">facet_wrap</span>(<span class="op">~</span>variable, <span class="dt">nrow =</span> <span class="dv">5</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb54-28" data-line-number="28"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">legend.position =</span> <span class="st">&quot;none&quot;</span>)</a>
+<a class="sourceLine" id="cb54-29" data-line-number="29"></a>
+<a class="sourceLine" id="cb54-30" data-line-number="30">p_hist_obs_sim</a>
+<a class="sourceLine" id="cb54-31" data-line-number="31"><span class="co"># ggsave(paste0(&quot;model_assesment_hist_obs_sim_mibi_cytof_one_K_&quot;,K, &quot;.png&quot;), p_hist_obs_sim, width = 12, height = 6)</span></a></code></pre></div>
+<p>The distribution of observed median of each protein expression (first facet) is similar to median of simulated data from the fitted topic model (other facets).</p>
+</div>
+<div id="infer-spatial-location-of-cytof-immune-cells" class="section level1">
+<h1>Infer spatial location of cytof immune cells</h1>
+<p>We use the sample from the first chain</p>
+<ul>
+<li>Create a Topic <span class="math inline">\(*\)</span> Chain matrix</li>
+</ul>
+<div class="sourceCode" id="cb55"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb55-1" data-line-number="1">theta &lt;-<span class="st"> </span>samples<span class="op">$</span>theta </a>
+<a class="sourceLine" id="cb55-2" data-line-number="2">theta_aligned &lt;-<span class="st"> </span>theta[<span class="dv">1</span><span class="op">:</span>(iter<span class="op">/</span><span class="dv">2</span>), ,]</a>
+<a class="sourceLine" id="cb55-3" data-line-number="3"><span class="kw">dimnames</span>(theta_aligned)[[<span class="dv">2</span>]] &lt;-<span class="st"> </span>mae_train<span class="op">$</span>cell_id</a>
+<a class="sourceLine" id="cb55-4" data-line-number="4"><span class="kw">dimnames</span>(theta_aligned)[[<span class="dv">3</span>]] &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="kw">paste0</span>(<span class="st">&quot;Topic_&quot;</span>, <span class="kw">seq</span>(<span class="dv">1</span>,K)))</a>
+<a class="sourceLine" id="cb55-5" data-line-number="5"></a>
+<a class="sourceLine" id="cb55-6" data-line-number="6"><span class="co"># array to a dataframe</span></a>
+<a class="sourceLine" id="cb55-7" data-line-number="7">theta_all &lt;-<span class="st"> </span><span class="kw">melt</span>(theta_aligned)</a>
+<a class="sourceLine" id="cb55-8" data-line-number="8"><span class="kw">colnames</span>(theta_all) &lt;-<span class="st"> </span><span class="kw">c</span>(<span class="st">&quot;iteration&quot;</span>, <span class="st">&quot;Sample&quot;</span>, <span class="st">&quot;Topic&quot;</span>, <span class="st">&quot;topic.dis&quot;</span>)</a>
+<a class="sourceLine" id="cb55-9" data-line-number="9">theta_all<span class="op">$</span>Chain &lt;-<span class="st"> </span><span class="kw">paste0</span>(<span class="st">&quot;Chain &quot;</span>, <span class="kw">rep</span>(<span class="kw">seq</span>(<span class="dv">1</span>, <span class="dv">1</span>), <span class="dt">each =</span> (iter<span class="op">/</span><span class="dv">2</span>)))</a>
+<a class="sourceLine" id="cb55-10" data-line-number="10"></a>
+<a class="sourceLine" id="cb55-11" data-line-number="11">sam &lt;-<span class="st"> </span><span class="kw">colData</span>(mae_train) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb55-12" data-line-number="12">theta_all<span class="op">$</span>Sample &lt;-<span class="st"> </span><span class="kw">as.character</span>(theta_all<span class="op">$</span>Sample)</a>
+<a class="sourceLine" id="cb55-13" data-line-number="13">theta_all &lt;-<span class="st"> </span><span class="kw">left_join</span>(theta_all, sam, <span class="dt">by =</span><span class="kw">c</span>(<span class="st">&quot;Sample&quot;</span>=<span class="st"> &quot;cell_id&quot;</span>))</a>
+<a class="sourceLine" id="cb55-14" data-line-number="14">theta_all<span class="op">$</span>Chain &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>Chain)</a>
+<a class="sourceLine" id="cb55-15" data-line-number="15">theta_all<span class="op">$</span>Topic &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>Topic)</a>
+<a class="sourceLine" id="cb55-16" data-line-number="16">theta_all<span class="op">$</span>Sample &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>Sample)</a>
+<a class="sourceLine" id="cb55-17" data-line-number="17"></a>
+<a class="sourceLine" id="cb55-18" data-line-number="18">theta_all<span class="op">$</span>cell_type &lt;-<span class="st"> </span><span class="kw">factor</span>(theta_all<span class="op">$</span>cell_type)</a>
+<a class="sourceLine" id="cb55-19" data-line-number="19">theta_all<span class="op">$</span>method &lt;-<span class="st"> </span><span class="kw">ifelse</span>(<span class="kw">is.na</span>(theta_all<span class="op">$</span>cell_type), <span class="st">&quot;cytof&quot;</span>, <span class="kw">as.character</span>(theta_all<span class="op">$</span>cell_type))</a></code></pre></div>
+<p>Based on the median topic distribution identified the most dominated topic in each cell</p>
+<div class="sourceCode" id="cb56"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb56-1" data-line-number="1">theta_summary &lt;-<span class="st"> </span>theta_all <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb56-2" data-line-number="2"><span class="st">  </span><span class="kw">group_by</span>(Sample, Topic, method) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb56-3" data-line-number="3"><span class="st">  </span><span class="kw">summarize</span>(<span class="dt">median.topic.dis =</span> <span class="kw">median</span>(topic.dis)) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb56-4" data-line-number="4"><span class="st">  </span><span class="kw">ungroup</span>() <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb56-5" data-line-number="5"><span class="st">  </span><span class="kw">mutate</span>(<span class="dt">Topic =</span> <span class="kw">factor</span>(Topic, <span class="dt">levels =</span> <span class="kw">rev</span>(<span class="kw">str_c</span>(<span class="st">&quot;Topic_&quot;</span>,<span class="dv">1</span><span class="op">:</span>K))))</a>
+<a class="sourceLine" id="cb56-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb56-7" data-line-number="7">theta_summary_<span class="dv">2</span> &lt;-<span class="st"> </span>theta_summary <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb56-8" data-line-number="8"><span class="st">  </span>dplyr<span class="op">::</span><span class="kw">group_by</span>(Sample) <span class="op">%&gt;%</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb56-9" data-line-number="9"><span class="st">  </span>dplyr<span class="op">::</span><span class="kw">summarise</span>(</a>
+<a class="sourceLine" id="cb56-10" data-line-number="10">    <span class="dt">max_topic =</span> <span class="kw">max</span>(median.topic.dis),</a>
+<a class="sourceLine" id="cb56-11" data-line-number="11">    <span class="dt">Topic =</span> Topic[<span class="kw">which</span>(median.topic.dis <span class="op">==</span><span class="st"> </span><span class="kw">max</span>(median.topic.dis))],</a>
+<a class="sourceLine" id="cb56-12" data-line-number="12">    <span class="dt">method =</span> method[<span class="dv">1</span>]</a>
+<a class="sourceLine" id="cb56-13" data-line-number="13">  )</a>
+<a class="sourceLine" id="cb56-14" data-line-number="14"></a>
+<a class="sourceLine" id="cb56-15" data-line-number="15"><span class="co"># saveRDS(theta_summary_2, paste0(&quot;../Results/co_location_mibi_cytof_one_K_&quot;, K, &quot;.rds&quot;))</span></a></code></pre></div>
+<div class="sourceCode" id="cb57"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb57-1" data-line-number="1">theta_summary_<span class="dv">2</span> &lt;-<span class="st"> </span><span class="kw">readRDS</span>(<span class="kw">paste0</span>(<span class="st">&quot;co_location_mibi_cytof_one_K_&quot;</span>, K, <span class="st">&quot;.rds&quot;</span>))</a></code></pre></div>
+<p>MIBI has only one site so we may not be able to infer spatial location for some cells in CyTOF.</p>
+<div class="sourceCode" id="cb58"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb58-1" data-line-number="1"><span class="co"># mibi X, Y coordinates</span></a>
+<a class="sourceLine" id="cb58-2" data-line-number="2">df &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">Sample =</span> mae_train<span class="op">$</span>cell_id, <span class="dt">X =</span> mae_train<span class="op">$</span>centroid_X, <span class="dt">Y =</span> mae_train<span class="op">$</span>centroid_Y)</a>
+<a class="sourceLine" id="cb58-3" data-line-number="3">df &lt;-<span class="st"> </span><span class="kw">left_join</span>(theta_summary_<span class="dv">2</span>, df, <span class="dt">by =</span> <span class="st">&quot;Sample&quot;</span>) <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb58-4" data-line-number="4">df<span class="op">$</span>Sample &lt;-<span class="st"> </span><span class="kw">as.character</span>(df<span class="op">$</span>Sample)</a>
+<a class="sourceLine" id="cb58-5" data-line-number="5"><span class="kw">rownames</span>(df) &lt;-<span class="st"> </span>df<span class="op">$</span>Sample</a>
+<a class="sourceLine" id="cb58-6" data-line-number="6"><span class="cf">for</span>(i <span class="cf">in</span> <span class="dv">1</span><span class="op">:</span><span class="kw">dim</span>(df)[<span class="dv">1</span>]){</a>
+<a class="sourceLine" id="cb58-7" data-line-number="7">  <span class="cf">if</span>(df<span class="op">$</span>method[i] <span class="op">==</span><span class="st"> &quot;cytof&quot;</span>){</a>
+<a class="sourceLine" id="cb58-8" data-line-number="8">    <span class="co">#subset the df mibi cells with the topic for ith cytof cell</span></a>
+<a class="sourceLine" id="cb58-9" data-line-number="9">    df_i &lt;-<span class="st"> </span>dplyr<span class="op">::</span><span class="kw">filter</span>(df, Topic <span class="op">==</span><span class="st"> </span>df<span class="op">$</span>Topic[i] <span class="op">&amp;</span><span class="st"> </span>method <span class="op">!=</span><span class="st"> &quot;cytof&quot;</span>)</a>
+<a class="sourceLine" id="cb58-10" data-line-number="10">    com_cell_close_to_max_topic_i &lt;-<span class="st"> </span>df_i<span class="op">$</span>Sample[<span class="kw">which</span>(<span class="kw">abs</span>(df<span class="op">$</span>max_topic[i] <span class="op">-</span><span class="st"> </span>df_i<span class="op">$</span>max_topic) <span class="op">==</span><span class="st"> </span><span class="kw">min</span>(<span class="kw">abs</span>(df<span class="op">$</span>max_topic[i] <span class="op">-</span><span class="st"> </span>df_i<span class="op">$</span>max_topic)))]</a>
+<a class="sourceLine" id="cb58-11" data-line-number="11">    <span class="cf">if</span>(<span class="kw">length</span>(<span class="kw">which</span>(df<span class="op">$</span>Sample <span class="op">==</span><span class="st"> </span>com_cell_close_to_max_topic_i))<span class="op">==</span><span class="dv">0</span>){</a>
+<a class="sourceLine" id="cb58-12" data-line-number="12">      df<span class="op">$</span>X[i] &lt;-<span class="st"> </span><span class="ot">NA</span></a>
+<a class="sourceLine" id="cb58-13" data-line-number="13">    }<span class="cf">else</span>{</a>
+<a class="sourceLine" id="cb58-14" data-line-number="14">      df<span class="op">$</span>X[i] &lt;-<span class="st"> </span>df<span class="op">$</span>X[<span class="kw">which</span>(df<span class="op">$</span>Sample <span class="op">==</span><span class="st"> </span>com_cell_close_to_max_topic_i)]</a>
+<a class="sourceLine" id="cb58-15" data-line-number="15">    }</a>
+<a class="sourceLine" id="cb58-16" data-line-number="16">    <span class="cf">if</span>(<span class="kw">length</span>(<span class="kw">which</span>(df<span class="op">$</span>Sample <span class="op">==</span><span class="st"> </span>com_cell_close_to_max_topic_i)) <span class="op">==</span><span class="st"> </span><span class="dv">0</span>){</a>
+<a class="sourceLine" id="cb58-17" data-line-number="17">      df<span class="op">$</span>Y[i] &lt;-<span class="st"> </span><span class="ot">NA</span></a>
+<a class="sourceLine" id="cb58-18" data-line-number="18">    }<span class="cf">else</span>{</a>
+<a class="sourceLine" id="cb58-19" data-line-number="19">      df<span class="op">$</span>Y[i] &lt;-<span class="st"> </span>df<span class="op">$</span>Y[<span class="kw">which</span>(df<span class="op">$</span>Sample <span class="op">==</span><span class="st"> </span>com_cell_close_to_max_topic_i)]</a>
+<a class="sourceLine" id="cb58-20" data-line-number="20">    }</a>
+<a class="sourceLine" id="cb58-21" data-line-number="21">    </a>
+<a class="sourceLine" id="cb58-22" data-line-number="22">  }</a>
+<a class="sourceLine" id="cb58-23" data-line-number="23">}</a></code></pre></div>
+<p>Plot the spatial location of cytof cells from patient BB028</p>
+<div class="sourceCode" id="cb59"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb59-1" data-line-number="1">manual_col &lt;-<span class="st"> </span><span class="kw">tableau_color_pal</span>(<span class="st">&quot;Classic 20&quot;</span>)(<span class="kw">length</span>(<span class="kw">unique</span>(df<span class="op">$</span>method)))</a>
+<a class="sourceLine" id="cb59-2" data-line-number="2">df<span class="op">$</span>method &lt;-<span class="st"> </span><span class="kw">factor</span>(df<span class="op">$</span>method)</a>
+<a class="sourceLine" id="cb59-3" data-line-number="3">df_cytof &lt;-<span class="st"> </span>dplyr<span class="op">::</span><span class="kw">filter</span>(df, method <span class="op">==</span><span class="st"> &quot;cytof&quot;</span>)</a>
+<a class="sourceLine" id="cb59-4" data-line-number="4">p_co &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="dt">data =</span> df) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb59-5" data-line-number="5"><span class="st">  </span><span class="kw">geom_point</span>(<span class="kw">aes</span>(<span class="dt">x=</span> X, <span class="dt">y =</span> Y, <span class="dt">col =</span> method), <span class="dt">size =</span> <span class="dv">5</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb59-6" data-line-number="6"><span class="st">  </span><span class="kw">theme_minimal</span>() <span class="op">+</span></a>
+<a class="sourceLine" id="cb59-7" data-line-number="7"><span class="st">  </span><span class="kw">scale_color_manual</span>(<span class="dt">values =</span> manual_col)  <span class="op">+</span></a>
+<a class="sourceLine" id="cb59-8" data-line-number="8"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">aspect.ratio =</span> <span class="dv">1</span>, <span class="dt">legend.position =</span> <span class="st">&quot;right&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb59-9" data-line-number="9"><span class="st">  </span><span class="kw">labs</span>(<span class="dt">fill =</span> <span class="st">&quot;method&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb59-10" data-line-number="10"><span class="st">  </span><span class="kw">xlim</span>(<span class="kw">c</span>(<span class="dv">0</span>, <span class="kw">max</span>(df<span class="op">$</span>X))) <span class="op">+</span></a>
+<a class="sourceLine" id="cb59-11" data-line-number="11"><span class="st">  </span><span class="kw">ylim</span>(<span class="kw">c</span>(<span class="dv">0</span>, <span class="kw">max</span>(df<span class="op">$</span>Y))) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb59-12" data-line-number="12"><span class="st">  </span><span class="kw">geom_text</span>(<span class="dt">data =</span> df_cytof, <span class="kw">aes</span>(<span class="dt">x =</span> X, <span class="dt">y=</span> Y, <span class="dt">label =</span> Sample), <span class="dt">check_overlap =</span> <span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb59-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb59-14" data-line-number="14">p_co</a>
+<a class="sourceLine" id="cb59-15" data-line-number="15"></a>
+<a class="sourceLine" id="cb59-16" data-line-number="16"><span class="co"># ggsave(paste0(&quot;co_location_mibi_cytof_one_K_&quot;, K, &quot;.png&quot;), p_co, width = 15, height = 15)</span></a></code></pre></div>
+</div>
+<div id="predict-spatial-pattern-of-proteins-not-measured-in-the-mibi-tof" class="section level1">
+<h1>Predict spatial pattern of proteins not measured in the MIBI-TOF</h1>
+<div class="sourceCode" id="cb60"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb60-1" data-line-number="1">proteins_not_measured_mibi &lt;-<span class="st"> </span><span class="kw">rowData</span>(mae[[<span class="st">&quot;cd45&quot;</span>]])<span class="op">$</span>marker_name[<span class="op">!</span>(<span class="kw">as.character</span>(<span class="kw">rowData</span>(mae[[<span class="st">&quot;cd45&quot;</span>]])<span class="op">$</span>marker_name) <span class="op">%in%</span><span class="st"> </span><span class="kw">as.character</span>(<span class="kw">rowData</span>(mae[[<span class="st">&quot;mibi&quot;</span>]])<span class="op">$</span>channel_name))] <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">as.character</span>()</a>
+<a class="sourceLine" id="cb60-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb60-3" data-line-number="3"><span class="co"># Simulated data</span></a>
+<a class="sourceLine" id="cb60-4" data-line-number="4">x_sim &lt;-<span class="st"> </span>samples<span class="op">$</span>x_sim <span class="co"># iteration * samples * ASVs</span></a>
+<a class="sourceLine" id="cb60-5" data-line-number="5"><span class="co"># Choose only the first chain</span></a>
+<a class="sourceLine" id="cb60-6" data-line-number="6">x_sim &lt;-<span class="st"> </span>x_sim[<span class="dv">1</span>, ,] <span class="co"># For each iteration, simulated data </span></a>
+<a class="sourceLine" id="cb60-7" data-line-number="7"><span class="kw">colnames</span>(x_sim) &lt;-<span class="st"> </span><span class="kw">colnames</span>(x_train)</a>
+<a class="sourceLine" id="cb60-8" data-line-number="8"><span class="kw">rownames</span>(x_train) &lt;-<span class="st"> </span><span class="kw">rownames</span>(x_train)</a>
+<a class="sourceLine" id="cb60-9" data-line-number="9">ind_mibi &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">rownames</span>(x_train) <span class="op">%in%</span><span class="st"> </span><span class="kw">colnames</span>(<span class="kw">assay</span>(mae_train[[<span class="st">&quot;mibi&quot;</span>]])))</a>
+<a class="sourceLine" id="cb60-10" data-line-number="10">x_sim_mibi &lt;-<span class="st"> </span>x_sim[ind_mibi, ]</a>
+<a class="sourceLine" id="cb60-11" data-line-number="11">ind_pro &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">colnames</span>(x_train) <span class="op">%in%</span><span class="st"> </span>proteins_not_measured_mibi)</a>
+<a class="sourceLine" id="cb60-12" data-line-number="12">ind_pro_present &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="op">!</span>(<span class="kw">colnames</span>(x_train) <span class="op">%in%</span><span class="st"> </span>proteins_not_measured_mibi))</a>
+<a class="sourceLine" id="cb60-13" data-line-number="13"></a>
+<a class="sourceLine" id="cb60-14" data-line-number="14">x_sim_mibi_only_measured &lt;-<span class="st"> </span>x_train[ind_mibi, ind_pro_present]</a>
+<a class="sourceLine" id="cb60-15" data-line-number="15">x_sim_mibi_only_measured_t &lt;-<span class="st"> </span><span class="kw">asinh</span>(x_sim_mibi_only_measured) </a>
+<a class="sourceLine" id="cb60-16" data-line-number="16"></a>
+<a class="sourceLine" id="cb60-17" data-line-number="17">x_sim_mibi_predict &lt;-<span class="st"> </span>x_sim_mibi</a>
+<a class="sourceLine" id="cb60-18" data-line-number="18">x_sim_mibi_predict_t &lt;-<span class="st"> </span><span class="kw">asinh</span>(x_sim_mibi_predict)</a>
+<a class="sourceLine" id="cb60-19" data-line-number="19"></a>
+<a class="sourceLine" id="cb60-20" data-line-number="20"></a>
+<a class="sourceLine" id="cb60-21" data-line-number="21"><span class="co"># UMAP of measured proteins</span></a>
+<a class="sourceLine" id="cb60-22" data-line-number="22">mibi_umap &lt;-<span class="st"> </span><span class="kw">umap</span>(x_sim_mibi_only_measured_t)</a>
+<a class="sourceLine" id="cb60-23" data-line-number="23">umap_df &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">UMAP1 =</span> mibi_umap[,<span class="dv">1</span>], </a>
+<a class="sourceLine" id="cb60-24" data-line-number="24">                      <span class="dt">UMAP2 =</span> mibi_umap[,<span class="dv">2</span>], </a>
+<a class="sourceLine" id="cb60-25" data-line-number="25">                      <span class="dt">cell_id =</span> <span class="kw">colData</span>(mae_train)<span class="op">$</span>cell_id[ind_mibi])</a>
+<a class="sourceLine" id="cb60-26" data-line-number="26">mibi_cell_data &lt;-<span class="st"> </span><span class="kw">colData</span>(mae_train)[ind_mibi, ] <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb60-27" data-line-number="27">umap_df  &lt;-<span class="st"> </span><span class="kw">left_join</span>(umap_df, mibi_cell_data, <span class="dt">by =</span> <span class="st">&quot;cell_id&quot;</span>)</a>
+<a class="sourceLine" id="cb60-28" data-line-number="28"></a>
+<a class="sourceLine" id="cb60-29" data-line-number="29">manual_col &lt;-<span class="st"> </span><span class="kw">tableau_color_pal</span>(<span class="st">&quot;Classic 20&quot;</span>)(<span class="kw">length</span>(<span class="kw">unique</span>(mae_train<span class="op">$</span>cell_type)))</a>
+<a class="sourceLine" id="cb60-30" data-line-number="30"></a>
+<a class="sourceLine" id="cb60-31" data-line-number="31">p1 &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="dt">data =</span> umap_df, </a>
+<a class="sourceLine" id="cb60-32" data-line-number="32">       <span class="kw">aes</span>(<span class="dt">x =</span> UMAP1, <span class="dt">y =</span> UMAP2, <span class="dt">color =</span> cell_type)) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb60-33" data-line-number="33"><span class="st">  </span><span class="kw">geom_point</span>(<span class="dt">size =</span> <span class="dv">3</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb60-34" data-line-number="34"><span class="st">  </span><span class="kw">theme_bw</span>() <span class="op">+</span></a>
+<a class="sourceLine" id="cb60-35" data-line-number="35"><span class="st">  </span><span class="kw">scale_color_manual</span>(<span class="dt">values =</span> manual_col)  <span class="op">+</span></a>
+<a class="sourceLine" id="cb60-36" data-line-number="36"><span class="st">  </span><span class="kw">labs</span>(<span class="dt">color =</span> <span class="st">&quot;Cell types&quot;</span>) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb60-37" data-line-number="37"><span class="st">  </span><span class="kw">ggtitle</span>(<span class="st">&quot;UMAP with measured proteins&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb60-38" data-line-number="38"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">aspect.ratio =</span> <span class="dv">1</span>, <span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>))</a>
+<a class="sourceLine" id="cb60-39" data-line-number="39">p1</a></code></pre></div>
+<div class="sourceCode" id="cb61"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb61-1" data-line-number="1"><span class="co"># Simulated data</span></a>
+<a class="sourceLine" id="cb61-2" data-line-number="2">x_sim &lt;-<span class="st"> </span>samples<span class="op">$</span>x_sim <span class="co"># iteration * samples * ASVs</span></a>
+<a class="sourceLine" id="cb61-3" data-line-number="3"><span class="co"># Choose only the first chain</span></a>
+<a class="sourceLine" id="cb61-4" data-line-number="4">x_sim &lt;-<span class="st"> </span>x_sim[<span class="dv">4</span>, ,] <span class="co"># For each iteration, simulated data </span></a>
+<a class="sourceLine" id="cb61-5" data-line-number="5"><span class="kw">colnames</span>(x_sim) &lt;-<span class="st"> </span><span class="kw">colnames</span>(x_train)</a>
+<a class="sourceLine" id="cb61-6" data-line-number="6"><span class="kw">rownames</span>(x_train) &lt;-<span class="st"> </span><span class="kw">rownames</span>(x_train)</a>
+<a class="sourceLine" id="cb61-7" data-line-number="7">ind_mibi &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">rownames</span>(x_train) <span class="op">%in%</span><span class="st"> </span><span class="kw">colnames</span>(<span class="kw">assay</span>(mae_train[[<span class="st">&quot;mibi&quot;</span>]])))</a>
+<a class="sourceLine" id="cb61-8" data-line-number="8">x_sim_mibi &lt;-<span class="st"> </span>x_sim[ind_mibi, ]</a>
+<a class="sourceLine" id="cb61-9" data-line-number="9">ind_pro &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">colnames</span>(x_train) <span class="op">%in%</span><span class="st"> </span>proteins_not_measured_mibi)</a>
+<a class="sourceLine" id="cb61-10" data-line-number="10">ind_pro_present &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="op">!</span>(<span class="kw">colnames</span>(x_train) <span class="op">%in%</span><span class="st"> </span>proteins_not_measured_mibi))</a>
+<a class="sourceLine" id="cb61-11" data-line-number="11"></a>
+<a class="sourceLine" id="cb61-12" data-line-number="12">x_sim_mibi_only_measured &lt;-<span class="st"> </span>x_train[ind_mibi, ind_pro_present]</a>
+<a class="sourceLine" id="cb61-13" data-line-number="13">x_sim_mibi_only_measured_t &lt;-<span class="st"> </span><span class="kw">asinh</span>(x_sim_mibi_only_measured) </a>
+<a class="sourceLine" id="cb61-14" data-line-number="14"></a>
+<a class="sourceLine" id="cb61-15" data-line-number="15">x_sim_mibi_predict &lt;-<span class="st"> </span>x_sim_mibi</a>
+<a class="sourceLine" id="cb61-16" data-line-number="16">x_sim_mibi_predict_t &lt;-<span class="st"> </span><span class="kw">asinh</span>(x_sim_mibi_predict)</a>
+<a class="sourceLine" id="cb61-17" data-line-number="17"></a>
+<a class="sourceLine" id="cb61-18" data-line-number="18"></a>
+<a class="sourceLine" id="cb61-19" data-line-number="19">manual_col &lt;-<span class="st"> </span><span class="kw">tableau_color_pal</span>(<span class="st">&quot;Classic 20&quot;</span>)(<span class="kw">length</span>(<span class="kw">unique</span>(mae_train<span class="op">$</span>cell_type)))</a>
+<a class="sourceLine" id="cb61-20" data-line-number="20"></a>
+<a class="sourceLine" id="cb61-21" data-line-number="21"></a>
+<a class="sourceLine" id="cb61-22" data-line-number="22"><span class="co"># UMAP of measured and predicted protein</span></a>
+<a class="sourceLine" id="cb61-23" data-line-number="23"><span class="co"># UMAP of measured proteins</span></a>
+<a class="sourceLine" id="cb61-24" data-line-number="24">mibi_umap &lt;-<span class="st"> </span><span class="kw">umap</span>(x_sim_mibi_predict_t)</a>
+<a class="sourceLine" id="cb61-25" data-line-number="25">umap_df &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">UMAP1 =</span> mibi_umap[,<span class="dv">1</span>], </a>
+<a class="sourceLine" id="cb61-26" data-line-number="26">                      <span class="dt">UMAP2 =</span> mibi_umap[,<span class="dv">2</span>], </a>
+<a class="sourceLine" id="cb61-27" data-line-number="27">                      <span class="dt">cell_id =</span> <span class="kw">colData</span>(mae_train)<span class="op">$</span>cell_id[ind_mibi])</a>
+<a class="sourceLine" id="cb61-28" data-line-number="28">mibi_cell_data &lt;-<span class="st"> </span><span class="kw">colData</span>(mae_train)[ind_mibi, ] <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb61-29" data-line-number="29">umap_df  &lt;-<span class="st"> </span><span class="kw">left_join</span>(umap_df, mibi_cell_data, <span class="dt">by =</span> <span class="st">&quot;cell_id&quot;</span>)</a>
+<a class="sourceLine" id="cb61-30" data-line-number="30"></a>
+<a class="sourceLine" id="cb61-31" data-line-number="31">manual_col &lt;-<span class="st"> </span><span class="kw">tableau_color_pal</span>(<span class="st">&quot;Classic 20&quot;</span>)(<span class="kw">length</span>(<span class="kw">unique</span>(mae_train<span class="op">$</span>cell_type)))</a>
+<a class="sourceLine" id="cb61-32" data-line-number="32"></a>
+<a class="sourceLine" id="cb61-33" data-line-number="33">p22 &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="dt">data =</span> umap_df, </a>
+<a class="sourceLine" id="cb61-34" data-line-number="34">       <span class="kw">aes</span>(<span class="dt">x =</span> UMAP1, <span class="dt">y =</span> UMAP2, <span class="dt">color =</span> cell_type)) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb61-35" data-line-number="35"><span class="st">  </span><span class="kw">geom_point</span>(<span class="dt">size =</span> <span class="dv">3</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb61-36" data-line-number="36"><span class="st">  </span><span class="kw">theme_bw</span>() <span class="op">+</span></a>
+<a class="sourceLine" id="cb61-37" data-line-number="37"><span class="st">  </span><span class="kw">scale_color_manual</span>(<span class="dt">values =</span> manual_col) <span class="op">+</span></a>
+<a class="sourceLine" id="cb61-38" data-line-number="38"><span class="st">  </span><span class="kw">labs</span>(<span class="dt">color =</span> <span class="st">&quot;Cell types&quot;</span>) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb61-39" data-line-number="39"><span class="st">  </span><span class="kw">ggtitle</span>(<span class="st">&quot;UMAP with measured and predicted proteins&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb61-40" data-line-number="40"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">aspect.ratio =</span> <span class="dv">1</span>, <span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>))</a>
+<a class="sourceLine" id="cb61-41" data-line-number="41">p22</a></code></pre></div>
+<div class="sourceCode" id="cb62"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb62-1" data-line-number="1"><span class="co"># Simulated data</span></a>
+<a class="sourceLine" id="cb62-2" data-line-number="2">x_sim &lt;-<span class="st"> </span>samples<span class="op">$</span>x_sim <span class="co"># iteration * samples * ASVs</span></a>
+<a class="sourceLine" id="cb62-3" data-line-number="3"><span class="co"># Choose only the first chain</span></a>
+<a class="sourceLine" id="cb62-4" data-line-number="4">x_sim &lt;-<span class="st"> </span>x_sim[<span class="dv">2</span>, ,] <span class="co"># For each iteration, simulated data </span></a>
+<a class="sourceLine" id="cb62-5" data-line-number="5"><span class="kw">colnames</span>(x_sim) &lt;-<span class="st"> </span><span class="kw">colnames</span>(x_train)</a>
+<a class="sourceLine" id="cb62-6" data-line-number="6"><span class="kw">rownames</span>(x_train) &lt;-<span class="st"> </span><span class="kw">rownames</span>(x_train)</a>
+<a class="sourceLine" id="cb62-7" data-line-number="7">ind_mibi &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">rownames</span>(x_train) <span class="op">%in%</span><span class="st"> </span><span class="kw">colnames</span>(<span class="kw">assay</span>(mae_train[[<span class="st">&quot;mibi&quot;</span>]])))</a>
+<a class="sourceLine" id="cb62-8" data-line-number="8">x_sim_mibi &lt;-<span class="st"> </span>x_sim[ind_mibi, ]</a>
+<a class="sourceLine" id="cb62-9" data-line-number="9">ind_pro &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="kw">colnames</span>(x_train) <span class="op">%in%</span><span class="st"> </span>proteins_not_measured_mibi)</a>
+<a class="sourceLine" id="cb62-10" data-line-number="10">ind_pro_present &lt;-<span class="st"> </span><span class="kw">which</span>(<span class="op">!</span>(<span class="kw">colnames</span>(x_train) <span class="op">%in%</span><span class="st"> </span>proteins_not_measured_mibi))</a>
+<a class="sourceLine" id="cb62-11" data-line-number="11"></a>
+<a class="sourceLine" id="cb62-12" data-line-number="12">x_sim_mibi_only_measured &lt;-<span class="st"> </span>x_train[ind_mibi, ind_pro_present]</a>
+<a class="sourceLine" id="cb62-13" data-line-number="13">x_sim_mibi_only_measured_t &lt;-<span class="st"> </span><span class="kw">asinh</span>(x_sim_mibi_only_measured) </a>
+<a class="sourceLine" id="cb62-14" data-line-number="14"></a>
+<a class="sourceLine" id="cb62-15" data-line-number="15">x_sim_mibi_predict &lt;-<span class="st"> </span>x_sim_mibi</a>
+<a class="sourceLine" id="cb62-16" data-line-number="16">x_sim_mibi_predict_t &lt;-<span class="st"> </span><span class="kw">asinh</span>(x_sim_mibi_predict)</a>
+<a class="sourceLine" id="cb62-17" data-line-number="17"></a>
+<a class="sourceLine" id="cb62-18" data-line-number="18"></a>
+<a class="sourceLine" id="cb62-19" data-line-number="19"></a>
+<a class="sourceLine" id="cb62-20" data-line-number="20">manual_col &lt;-<span class="st"> </span><span class="kw">tableau_color_pal</span>(<span class="st">&quot;Classic 20&quot;</span>)(<span class="kw">length</span>(<span class="kw">unique</span>(mae_train<span class="op">$</span>cell_type)))</a>
+<a class="sourceLine" id="cb62-21" data-line-number="21"></a>
+<a class="sourceLine" id="cb62-22" data-line-number="22"></a>
+<a class="sourceLine" id="cb62-23" data-line-number="23"><span class="co"># UMAP of measured and predicted protein</span></a>
+<a class="sourceLine" id="cb62-24" data-line-number="24"><span class="co"># UMAP of measured proteins</span></a>
+<a class="sourceLine" id="cb62-25" data-line-number="25">mibi_umap &lt;-<span class="st"> </span><span class="kw">umap</span>(x_sim_mibi_predict_t)</a>
+<a class="sourceLine" id="cb62-26" data-line-number="26">umap_df &lt;-<span class="st"> </span><span class="kw">data.frame</span>(<span class="dt">UMAP1 =</span> mibi_umap[,<span class="dv">1</span>], </a>
+<a class="sourceLine" id="cb62-27" data-line-number="27">                      <span class="dt">UMAP2 =</span> mibi_umap[,<span class="dv">2</span>], </a>
+<a class="sourceLine" id="cb62-28" data-line-number="28">                      <span class="dt">cell_id =</span> <span class="kw">colData</span>(mae_train)<span class="op">$</span>cell_id[ind_mibi])</a>
+<a class="sourceLine" id="cb62-29" data-line-number="29">mibi_cell_data &lt;-<span class="st"> </span><span class="kw">colData</span>(mae_train)[ind_mibi, ] <span class="op">%&gt;%</span><span class="st"> </span><span class="kw">data.frame</span>()</a>
+<a class="sourceLine" id="cb62-30" data-line-number="30">umap_df  &lt;-<span class="st"> </span><span class="kw">left_join</span>(umap_df, mibi_cell_data, <span class="dt">by =</span> <span class="st">&quot;cell_id&quot;</span>)</a>
+<a class="sourceLine" id="cb62-31" data-line-number="31"></a>
+<a class="sourceLine" id="cb62-32" data-line-number="32">manual_col &lt;-<span class="st"> </span><span class="kw">tableau_color_pal</span>(<span class="st">&quot;Classic 20&quot;</span>)(<span class="kw">length</span>(<span class="kw">unique</span>(mae_train<span class="op">$</span>cell_type)))</a>
+<a class="sourceLine" id="cb62-33" data-line-number="33"></a>
+<a class="sourceLine" id="cb62-34" data-line-number="34">p23 &lt;-<span class="st"> </span><span class="kw">ggplot</span>(<span class="dt">data =</span> umap_df, </a>
+<a class="sourceLine" id="cb62-35" data-line-number="35">       <span class="kw">aes</span>(<span class="dt">x =</span> UMAP1, <span class="dt">y =</span> UMAP2, <span class="dt">color =</span> cell_type)) <span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb62-36" data-line-number="36"><span class="st">  </span><span class="kw">geom_point</span>(<span class="dt">size =</span> <span class="dv">3</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb62-37" data-line-number="37"><span class="st">  </span><span class="kw">theme_bw</span>() <span class="op">+</span></a>
+<a class="sourceLine" id="cb62-38" data-line-number="38"><span class="st">  </span><span class="kw">scale_color_manual</span>(<span class="dt">values =</span> manual_col) <span class="op">+</span></a>
+<a class="sourceLine" id="cb62-39" data-line-number="39"><span class="st">  </span><span class="kw">labs</span>(<span class="dt">color =</span> <span class="st">&quot;Cell types&quot;</span>)<span class="op">+</span><span class="st"> </span></a>
+<a class="sourceLine" id="cb62-40" data-line-number="40"><span class="st">  </span><span class="kw">ggtitle</span>(<span class="st">&quot;UMAP with measured and predicted proteins&quot;</span>) <span class="op">+</span></a>
+<a class="sourceLine" id="cb62-41" data-line-number="41"><span class="st">  </span><span class="kw">theme</span>(<span class="dt">aspect.ratio =</span> <span class="dv">1</span>, <span class="dt">plot.title =</span> <span class="kw">element_text</span>(<span class="dt">hjust =</span> <span class="fl">0.5</span>))</a>
+<a class="sourceLine" id="cb62-42" data-line-number="42">p23</a></code></pre></div>
+<div class="sourceCode" id="cb63"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb63-1" data-line-number="1">com_p &lt;-<span class="st"> </span><span class="kw">grid.arrange</span>(p1, <span class="kw">arrangeGrob</span>(p22, p23, <span class="dt">ncol=</span><span class="dv">1</span>), <span class="dt">ncol=</span><span class="dv">2</span>, <span class="dt">widths=</span><span class="kw">c</span>(<span class="dv">1</span>,<span class="fl">1.2</span>))</a>
+<a class="sourceLine" id="cb63-2" data-line-number="2"></a>
+<a class="sourceLine" id="cb63-3" data-line-number="3"></a>
+<a class="sourceLine" id="cb63-4" data-line-number="4"><span class="co"># ggsave(&quot;predicted_mibi_protein.png&quot;, com_p, width = 20, height = 15)</span></a></code></pre></div>
+<p>The clusters of cells are clearly identified when using observed and predicted protein expressions.</p>
+</div>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p><a href="mailto:jpratheepa31@gmail.com" class="email">jpratheepa31@gmail.com</a><a href="#fnref1" class="footnote-back">↩</a></p></li>
+</ol>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,42 @@
+Package: BIRSBIO2020scProteomicsLDA
+Type: Package
+Title: Latent Dirichlet Allocation to Integrate Single-Cell Targeted Proteomics Data
+Version: 0.1.0
+Authors@R: 
+    person(given = "Pratheepa",
+           family = "Jeganathan",
+           role = c("aut", "cre"),
+           email = "jpratheepa31@gmail.com",
+           comment = c(ORCID = "0000-0002-6467-0180"))
+Description: This package serves as a workflow for using Bayesian latent Dirichlet allocation to jointly integrate two targeted proteomics data from different breast cancer patients with partially-overlapping proteomic markers.
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.0
+Depends: 
+    Biobase,
+    SingleCellExperiment,
+    ggplot2,
+    rstan,
+    plyr,
+    reshape2,
+    readr,
+    magrittr,
+    MultiAssayExperiment,
+    dplyr,
+    DESeq2,
+    abind,
+    tibble,
+    RColorBrewer,
+    raster,
+    stringr,
+    ggthemes,
+    pheatmap,
+    gtools,
+    uwot,
+    gridExtra
+Suggests: 
+    knitr,
+    rmarkdown,
+    pkgdown
+VignetteBuilder: knitr
