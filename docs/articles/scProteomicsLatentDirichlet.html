@@ -84,15 +84,34 @@
 
     
     
-<p>We use this R Markdown to run the topic modeling.</p>
-<p>We use iterations 100 for this vignette, but the results for iterations 2000 is available.</p>
+<div id="introduction" class="section level1">
+<h1 class="hasAnchor">
+<a href="#introduction" class="anchor"></a>Introduction</h1>
+<p>Characterizing the tumor ecosystem in breast cancer patients is vital for identifying prognosis and treatment. Single-cell targeted proteomics methods can quantify protein expression in tumor and immune cells and spatial coordinates of cells. However, the tumor ecosystem is phenotypically and functionally heterogeneous. Thus, we need to consider multiple targeted proteomics methods to deepen our understanding of the breast cancer tumor ecosystem.</p>
+<p>We propose Bayesian latent Dirichlet allocation to jointly integrate two targeted proteomics data from different breast cancer patients with partially-overlapping proteomic markers. We then use samples drawn from the posterior to infer cell co-location based on the latent topic proportions in cells. We also infer the spatial location of CyTOF cells using the MIBI-TOF.</p>
+<p>We illustrated the techniques using the mass cytometry (CyTOF) data of <span class="citation">Wagner et al. (2019)</span> and multiplexed ion beam imaging- time of flight (MIBI - TOF) data of <span class="citation">Keren et al. (2018)</span>, studies on the tumor and immune ecosystem of human breast cancer patients. This vignette provides R scripts for the analysis.</p>
+</div>
+<div id="method" class="section level1">
+<h1 class="hasAnchor">
+<a href="#method" class="anchor"></a>Method</h1>
+<p>We extend <code>MultiAssayExperiment</code> <span class="citation">Ramos et al. (2017)</span> class to integrate multiple single-cell proteomics data. This container can be used for preprocessing, transformation, extracting spatial information from raster objects, and adding cell information, topic modeling, and visualization.</p>
+<p><span class="citation">Keren et al. (2018)</span> MIBI-TOF data are the size-normalized raw intensity values, arcsinh transformed and standardized across the markers. The distribution of transformed values shows that there are outliers in 32 protein markers. <span class="citation">Wagner et al. (2019)</span> CyTOF data are arcsinh transformed of intensity values. We do the inverse transformation of CyTOF data. We then use the upper limit of CyTOF data to scale the MIBI-TOF (normalized) data to the range of CyTOF data. After making the same units in both CyTOF and MIBI-TOF, we impute the protein expression that is not measured in one of the platforms using the nearest neighbor averaging <span class="citation">Hastie et al. (2019)</span>. We round the protein expression to an integer.</p>
+<p>We use topic modeling to find the dominated topics in CyTOF and MIBI-TOF cells <span class="citation">Blei, Ng, and Jordan (2003)</span>. We assign the spatial location of MIBI-TOF cells to the CyTOF data based on the topic distribution in each cell (if the difference between the topic distribution of the dominated topic in the CyTOF and the dominated topic in the MIBI-TOF is the minimum.) We infer the spatial location of CyTOF cells using the MIBI-TOF (one patient, but we can increase the number of patients). We plot the spatial co-location of CyTOF cells related to the MIBI-TOF spatial location.</p>
+<p>We use fitted topic modeling to simulate data that gives us the predicted value for MIBI-TOF markers that are not observed.</p>
+</div>
+<div id="results" class="section level1">
+<h1 class="hasAnchor">
+<a href="#results" class="anchor"></a>Results</h1>
+<div id="subject-selection" class="section level2">
+<h2 class="hasAnchor">
+<a href="#subject-selection" class="anchor"></a>Subject selection</h2>
+<p>We choose one patient from CyTOF (Live cells: immune panel) and one patient from MIBI-TOF, but the ideal is to use MIBI-TOF data from the same patient. For the topic modeling, we keep 10% cells from MIBI-TOF for the test data to choose an optimal number of topics as five <span class="math inline">\(\left(K=5\right)\)</span> based on the posterior log-likelihood.</p>
 <div class="sourceCode" id="cb1"><html><body><pre class="r"><span class="no">K</span> <span class="kw">&lt;-</span> <span class="fl">5</span>
-<span class="no">K</span></pre></body></html></div>
-<pre><code>## [1] 5</code></pre>
-<div class="sourceCode" id="cb3"><html><body><pre class="r"><span class="no">iter</span> <span class="kw">&lt;-</span> <span class="fl">100</span>
+<span class="no">K</span>
+<span class="no">iter</span> <span class="kw">&lt;-</span> <span class="fl">2000</span>
 <span class="no">iter</span></pre></body></html></div>
-<pre><code>## [1] 100</code></pre>
-<div class="sourceCode" id="cb5"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">SingleCellExperiment</span>)
+<p>We load the required packages for the analysis.</p>
+<div class="sourceCode" id="cb2"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">SingleCellExperiment</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">ggplot2</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">rstan</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">plyr</span>)
@@ -112,19 +131,20 @@
 <span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">gtools</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">uwot</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/library.html">library</a></span>(<span class="no">gridExtra</span>)</pre></body></html></div>
-<div id="cytof" class="section level1">
-<h1 class="hasAnchor">
-<a href="#cytof" class="anchor"></a>CyTOF</h1>
+</div>
+<div id="data" class="section level2">
+<h2 class="hasAnchor">
+<a href="#data" class="anchor"></a>Data</h2>
 <ul>
 <li>Wagner 2018 Cytof
 <ul>
-<li>140 breast cancer patients; Of 140, 6 tripple negative (TN)</li>
+<li>140 breast cancer patients; Of 140, 6 triple negative (TN)</li>
 <li>cd45_sce_dropna$Clinical.Subtype == "TN</li>
 <li>3 cancer-free</li>
 <li>73 protein markers in immune-centric and tumor-centric microenvironment</li>
 </ul>
 </li>
-<li>Keren 2018 Multiplex Ion Bean Imaging (MIBI)
+<li>Keren 2018 Multiplex Ion Bean Imaging (MIBI-TOF)
 <ul>
 <li>Tumor-immune microenvironment in TN patients</li>
 <li>41 TN patients</li>
@@ -132,19 +152,17 @@
 </ul>
 </li>
 </ul>
-<p>We will choose patients with TN with immune and tumor cells in both CyTOF and MIBI for the integrative analysis.</p>
+<p><strong>Note</strong>: To create MultiAssayExperiment, we choose patients with TN with immune and tumor cells in both CyTOF and MIBI-TOF. Then, we select one patient from each CyTOF and MIBI-TOF for the integrative analysis.</p>
 </div>
-<div id="mass-tag-cytof-breast-cancer-data" class="section level1">
-<h1 class="hasAnchor">
-<a href="#mass-tag-cytof-breast-cancer-data" class="anchor"></a>Mass-Tag CyTOF Breast Cancer Data</h1>
-<ul>
-<li>For this analysis we use <strong>cd45.sce</strong>: CD45+ cells from the live cells; downsampled to 426,872 cells (assayed on immune panel) <span class="math inline">\(\times\)</span> 35 proteins</li>
-</ul>
-<div class="sourceCode" id="cb6"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/load.html">load</a></span>(<span class="st">"masstagSCE.rda"</span>)
+<div id="mass-tag-cytof-breast-cancer-data" class="section level2">
+<h2 class="hasAnchor">
+<a href="#mass-tag-cytof-breast-cancer-data" class="anchor"></a>Mass-Tag CyTOF Breast Cancer Data</h2>
+<p>We use <strong>cd45.sce</strong>: CD45+ cells from the live cells; down-sampled to 426,872 cells (assayed on immune panel) <span class="math inline">\(\times\)</span> 35 proteins.</p>
+<div class="sourceCode" id="cb3"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/load.html">load</a></span>(<span class="st">"masstagSCE.rda"</span>)
 <span class="no">cd45.sce</span> <span class="co"># 38 * 426872</span>
 <span class="fu"><a href="https://rdrr.io/r/base/rm.html">rm</a></span>(<span class="no">epith.sce</span>, <span class="no">livecells.sce</span>, <span class="no">myeloid.sce</span>, <span class="no">tcell.sce</span>)</pre></body></html></div>
-<p>Drop the five subjects without any clinical data. We can use Gender variable to identify those subjects</p>
-<div class="sourceCode" id="cb7"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/pkg/raster/man/unique.html">unique</a></span>(<span class="fu">colData</span>(<span class="no">cd45.sce</span>)$<span class="no">patient_id.y</span>[<span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span>(<span class="fu">colData</span>(<span class="no">cd45.sce</span>)$<span class="no">Gender</span>))])
+<p>We drop the five patients without any clinical data. We can use the <code>Gender</code> variable to identify those patients.</p>
+<div class="sourceCode" id="cb4"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/pkg/raster/man/unique.html">unique</a></span>(<span class="fu">colData</span>(<span class="no">cd45.sce</span>)$<span class="no">patient_id.y</span>[<span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span>(<span class="fu">colData</span>(<span class="no">cd45.sce</span>)$<span class="no">Gender</span>))])
 
 <span class="no">cd45_to_keep</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span>(!<span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span>(<span class="fu">colData</span>(<span class="no">cd45.sce</span>)$<span class="no">Gender</span>))
 <span class="no">cd45.sce_dropna</span> <span class="kw">&lt;-</span> <span class="no">cd45.sce</span>[,<span class="no">cd45_to_keep</span>]
@@ -154,33 +172,33 @@
 <span class="fu"><a href="https://rdrr.io/r/base/rm.html">rm</a></span>(<span class="no">cd45.sce</span>, <span class="no">cd45_to_keep</span>)
 
 <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">saveRDS</a></span>(<span class="no">cd45.sce_dropna</span>, <span class="st">"cd45_sce_dropna.rds"</span>)</pre></body></html></div>
-<div class="sourceCode" id="cb8"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"cd45_sce_dropna.rds"</span>)
+<div class="sourceCode" id="cb5"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"cd45_sce_dropna.rds"</span>)
 <span class="no">cd45_sce</span></pre></body></html></div>
-<p>There are three proteins without gene symbol in cd45_sce_dropna so we drop them (non-protein channels for cisplatin and DNA tags that are included)</p>
-<div class="sourceCode" id="cb9"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[!(<span class="fu">rowData</span>(<span class="no">cd45_sce</span>)$<span class="no">hgnc_symbol</span> <span class="kw">==</span> <span class="st">"na"</span>) ,]
+<p>There are three proteins without gene symbol in <code>cd45_sce_dropna</code>, so we drop them (non-protein channels for cisplatin and DNA tags included.)</p>
+<div class="sourceCode" id="cb6"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[!(<span class="fu">rowData</span>(<span class="no">cd45_sce</span>)$<span class="no">hgnc_symbol</span> <span class="kw">==</span> <span class="st">"na"</span>) ,]
 <span class="no">cd45_sce</span></pre></body></html></div>
-<p>There are two different health status</p>
-<div class="sourceCode" id="cb10"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="fu">colData</span>(<span class="no">cd45_sce</span>)$<span class="no">Health.Status</span>)</pre></body></html></div>
-<p>There are five different clinical subtypes of cancer patients, including TN and healthy</p>
-<div class="sourceCode" id="cb11"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="fu">colData</span>(<span class="no">cd45_sce</span>)$<span class="no">Clinical.Subtype</span>)</pre></body></html></div>
-<p>Subset TN clinical subtype</p>
-<div class="sourceCode" id="cb12"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[, <span class="no">cd45_sce</span>$<span class="no">Clinical.Subtype</span> <span class="kw">==</span> <span class="st">"TN"</span>]
+<p>There are two different health status.</p>
+<div class="sourceCode" id="cb7"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="fu">colData</span>(<span class="no">cd45_sce</span>)$<span class="no">Health.Status</span>)</pre></body></html></div>
+<p>There are five different clinical subtypes of cancer patients, including TN and healthy.</p>
+<div class="sourceCode" id="cb8"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="fu">colData</span>(<span class="no">cd45_sce</span>)$<span class="no">Clinical.Subtype</span>)</pre></body></html></div>
+<p>We subset TN clinical subtype.</p>
+<div class="sourceCode" id="cb9"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[, <span class="no">cd45_sce</span>$<span class="no">Clinical.Subtype</span> <span class="kw">==</span> <span class="st">"TN"</span>]
 <span class="no">cd45_sce</span>
 <span class="co">#drop cells(columns) with no protein expression</span>
 <span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/rowSums.html">colSums</a></span>(<span class="fu">assay</span>(<span class="no">cd45_sce</span>)) <span class="kw">&gt;</span> <span class="fl">0</span>]
 <span class="no">cd45_sce</span>
 <span class="co"># drop levels of patient_id.x</span>
 <span class="no">cd45_sce</span>$<span class="no">patient_id.x</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/droplevels.html">droplevels</a></span>(<span class="no">cd45_sce</span>$<span class="no">patient_id.x</span>)</pre></body></html></div>
-<p>There are six TN patients and two had previous cancer incidence</p>
-<div class="sourceCode" id="cb13"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="no">cd45_sce</span>$<span class="no">Previous.Cancer.Incidences</span>, <span class="no">cd45_sce</span>$<span class="no">patient_id.x</span>)</pre></body></html></div>
-<p>Let’s choose subject BB028 and will see whether we can infer co-location of immune cells.</p>
-<div class="sourceCode" id="cb14"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[ , <span class="no">cd45_sce</span>$<span class="no">patient_id.x</span> <span class="kw">==</span> <span class="st">"BB028"</span>]
+<p>There are six TN patients, and among them, two had previous cancer incidence.</p>
+<div class="sourceCode" id="cb10"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="no">cd45_sce</span>$<span class="no">Previous.Cancer.Incidences</span>, <span class="no">cd45_sce</span>$<span class="no">patient_id.x</span>)</pre></body></html></div>
+<p>We choose patient <strong>BB028</strong> and infer the co-location of immune cells in the CyTOF data using MIBI-TOF data.</p>
+<div class="sourceCode" id="cb11"><html><body><pre class="r"><span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[ , <span class="no">cd45_sce</span>$<span class="no">patient_id.x</span> <span class="kw">==</span> <span class="st">"BB028"</span>]
 <span class="no">cd45_sce</span></pre></body></html></div>
-<p>Add cell id’s to CyTOF</p>
-<div class="sourceCode" id="cb15"><html><body><pre class="r"><span class="no">cd45_sce</span>$<span class="no">cell_id</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"cytof_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html">seq</a></span>(<span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">cd45_sce</span>)[<span class="fl">2</span>]))
+<p>We add cell ids to CyTOF.</p>
+<div class="sourceCode" id="cb12"><html><body><pre class="r"><span class="no">cd45_sce</span>$<span class="no">cell_id</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"cytof_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html">seq</a></span>(<span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">cd45_sce</span>)[<span class="fl">2</span>]))
 <span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">cd45_sce</span>) <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>$<span class="no">cell_id</span></pre></body></html></div>
-<p>heatmap</p>
-<div class="sourceCode" id="cb16"><html><body><pre class="r"><span class="no">or</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/order.html">order</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/colSums.html">rowMeans</a></span>(<span class="fu">assay</span>(<span class="no">cd45_sce</span>)), <span class="kw">decreasing</span><span class="kw">=</span><span class="fl">TRUE</span>)
+<p>Heatmap of the protein expression in each cell of patient <strong>BB028</strong>.</p>
+<div class="sourceCode" id="cb13"><html><body><pre class="r"><span class="no">or</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/order.html">order</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/colSums.html">rowMeans</a></span>(<span class="fu">assay</span>(<span class="no">cd45_sce</span>)), <span class="kw">decreasing</span><span class="kw">=</span><span class="fl">TRUE</span>)
 <span class="no">ass</span> <span class="kw">&lt;-</span> <span class="fu">assay</span>(<span class="no">cd45_sce</span>)[<span class="no">or</span>, ]
 
 <span class="no">df</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.data.frame.html">as.data.frame</a></span>(<span class="fu">colData</span>(<span class="no">cd45_sce</span>)[<span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">ass</span>), <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="st">"patient_id.x"</span>, <span class="st">"Menopause.Status"</span>, <span class="st">"Previous.Cancer.Incidences"</span>, <span class="st">"HER2.IHC.Score"</span> ,<span class="st">"cell_id"</span>)])
@@ -198,25 +216,30 @@
               <span class="kw">fontsize_row</span> <span class="kw">=</span> <span class="fl">14</span>,
               <span class="kw">fontsize_col</span> <span class="kw">=</span> <span class="fl">14</span>,
               <span class="kw">show_colnames</span> <span class="kw">=</span> <span class="fl">FALSE</span>)</pre></body></html></div>
+<div class="figure" style="text-align: center">
+<img src="heatmap_BB028_CyTOF.png" alt="Heatmap of the protein expression in each cell of patient **BB028**." width="75%"><p class="caption">
+Heatmap of the protein expression in each cell of patient <strong>BB028</strong>.
+</p>
 </div>
-<div id="keren-et-al--mibi-tof-breast-cancer-data" class="section level1">
-<h1 class="hasAnchor">
-<a href="#keren-et-al--mibi-tof-breast-cancer-data" class="anchor"></a>Keren et al., MIBI-TOF Breast Cancer Data</h1>
+</div>
+<div id="keren-et-al--mibi-tof-breast-cancer-data" class="section level2">
+<h2 class="hasAnchor">
+<a href="#keren-et-al--mibi-tof-breast-cancer-data" class="anchor"></a>Keren et al., MIBI-TOF Breast Cancer Data</h2>
 <ul>
 <li>All 39 patients were TN</li>
 <li>The size-normalized raw intensity values are then arcsinh transformed and standardized across the markers.</li>
 </ul>
-<div class="sourceCode" id="cb17"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/load.html">load</a></span>(<span class="st">'mibiSCE.rda'</span>)
+<div class="sourceCode" id="cb14"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/load.html">load</a></span>(<span class="st">'mibiSCE.rda'</span>)
 <span class="no">mibi.sce</span>
 
 <span class="fu"><a href="https://rdrr.io/pkg/DESeq2/man/summary.html">summary</a></span>(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.matrix.html">as.vector</a></span>(<span class="fu">assay</span>(<span class="no">mibi.sce</span>)))
 <span class="fu"><a href="https://rdrr.io/r/base/colSums.html">rowMeans</a></span>(<span class="fu">assay</span>(<span class="no">mibi.sce</span>))
 <span class="fu">rowSds</span>(<span class="fu">assay</span>(<span class="no">mibi.sce</span>))
 <span class="fu">rowMax</span>(<span class="fu">assay</span>(<span class="no">mibi.sce</span>))</pre></body></html></div>
-<p>Rows correspond to channels and columns correspond to cells. We can see all of the channels that were collected in this experiment:</p>
-<div class="sourceCode" id="cb18"><html><body><pre class="r"><span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">mibi.sce</span>)</pre></body></html></div>
-<p>The 38 proteins can be easily identified by using the binary attribute is_protein from rowData (The other 11 comprise background, experimental controls (e.g, Au and dsDNA), and elements of potential interest in studying cellular mechanisms (e.g., Ca, Fe; relevant in other spatial studies))</p>
-<div class="sourceCode" id="cb19"><html><body><pre class="r"><span class="no">mibi.sce_proteins</span> <span class="kw">&lt;-</span> <span class="no">mibi.sce</span>[<span class="fu">rowData</span>(<span class="no">mibi.sce</span>)$<span class="no">is_protein</span> <span class="kw">==</span> <span class="fl">1</span>,]
+<p>Rows correspond to channels, and columns correspond to cells. We can see all of the channels that were collected in this experiment.</p>
+<div class="sourceCode" id="cb15"><html><body><pre class="r"><span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">mibi.sce</span>)</pre></body></html></div>
+<p>The 38 proteins can be easily identified by using the binary attribute <code>is_protein</code> from <code>rowData</code> (The other 11 comprise background, experimental controls (e.g., Au and dsDNA), and elements of potential interest in studying cellular mechanisms (e.g., Ca, Fe; relevant in other spatial studies.)</p>
+<div class="sourceCode" id="cb16"><html><body><pre class="r"><span class="no">mibi.sce_proteins</span> <span class="kw">&lt;-</span> <span class="no">mibi.sce</span>[<span class="fu">rowData</span>(<span class="no">mibi.sce</span>)$<span class="no">is_protein</span> <span class="kw">==</span> <span class="fl">1</span>,]
 <span class="no">mibi.sce_proteins</span>
 <span class="fu"><a href="https://rdrr.io/r/base/rm.html">rm</a></span>(<span class="no">mibi.sce</span>)
 
@@ -224,18 +247,17 @@
 <span class="fu"><a href="https://rdrr.io/r/base/colSums.html">rowMeans</a></span>(<span class="fu">assay</span>(<span class="no">mibi.sce_proteins</span>))
 <span class="fu">rowSds</span>(<span class="fu">assay</span>(<span class="no">mibi.sce_proteins</span>))
 <span class="fu">rowMax</span>(<span class="fu">assay</span>(<span class="no">mibi.sce_proteins</span>))</pre></body></html></div>
-<p>Cell type information is availble in the columns <em>tumor_group</em> and <em>immune_group</em> . That is, 51% of cells were Keratin positive tumor cells and 41% of cells were immune cells.</p>
-<div class="sourceCode" id="cb20"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/Round.html">round</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="no">mibi.sce_proteins</span>$<span class="no">tumor_group</span>)/<span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">ncol</a></span>(<span class="no">mibi.sce_proteins</span>),<span class="fl">2</span>)</pre></body></html></div>
-<p>Among the immune cells, macrophages and CD8, CD4+ T-cells and other immune cells were identified. 10% of all cells assayed were macrophages</p>
-<div class="sourceCode" id="cb21"><html><body><pre class="r"><span class="co"># Immune Cells</span>
+<p>Cell type information is available in the columns <em>tumor_group</em> and <em>immune_group</em>. That is, 51% of cells were Keratin positive tumor cells, and 41% of cells were immune cells.</p>
+<div class="sourceCode" id="cb17"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/Round.html">round</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="no">mibi.sce_proteins</span>$<span class="no">tumor_group</span>)/<span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">ncol</a></span>(<span class="no">mibi.sce_proteins</span>),<span class="fl">2</span>)</pre></body></html></div>
+<p>Among the immune cells, macrophages, and CD8, CD4+ T-cells and other immune cells were identified. 10% of all cells assayed were macrophages.</p>
+<div class="sourceCode" id="cb18"><html><body><pre class="r"><span class="co"># Immune Cells</span>
 <span class="fu"><a href="https://rdrr.io/r/base/Round.html">round</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="no">mibi.sce_proteins</span>$<span class="no">immune_group</span>)/<span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">ncol</a></span>(<span class="no">mibi.sce_proteins</span>),<span class="fl">2</span>)</pre></body></html></div>
-<p>Consider Keratin positive tumor cells and immune cells (there are different immune cell types within immune cells)</p>
-<div class="sourceCode" id="cb22"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="fu">colData</span>(<span class="no">mibi.sce_proteins</span>)$<span class="no">tumor_group</span>)
+<p>We consider Keratin positive tumor cells and immune cells (there are different immune cell types within immune cells.)</p>
+<div class="sourceCode" id="cb19"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="fu">colData</span>(<span class="no">mibi.sce_proteins</span>)$<span class="no">tumor_group</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/table.html">table</a></span>(<span class="fu">colData</span>(<span class="no">mibi.sce_proteins</span>)$<span class="no">tumor_group</span>, <span class="fu">colData</span>(<span class="no">mibi.sce_proteins</span>)$<span class="no">immune_group</span>)
 
 <span class="no">mibi.sce_proteins</span> <span class="kw">&lt;-</span> <span class="no">mibi.sce_proteins</span>[, <span class="fu">colData</span>(<span class="no">mibi.sce_proteins</span>)$<span class="no">tumor_group</span> <span class="kw">%in%</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="st">"Immune"</span>, <span class="st">"Keratin-positive tumor"</span>)]</pre></body></html></div>
-<p>heatmap of protein expression in tumor and immune cells</p>
-<div class="sourceCode" id="cb23"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi.sce_proteins</span>
+<div class="sourceCode" id="cb20"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi.sce_proteins</span>
 <span class="no">mibi</span>
 <span class="co">#drop cells(columns) with no protein expression</span>
 <span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>[, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/rowSums.html">colSums</a></span>(<span class="fu">assay</span>(<span class="no">mibi</span>)) <span class="kw">&gt;</span> <span class="fl">0</span>]
@@ -243,18 +265,15 @@
 <span class="co">#drop proteins(rows) with no expression in any of these cells</span>
 <span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>[<span class="fu"><a href="https://rdrr.io/pkg/raster/man/rowSums.html">rowSums</a></span>(<span class="fu">assay</span>(<span class="no">mibi</span>)) <span class="kw">&gt;</span> <span class="fl">0</span>, ]
 <span class="no">mibi</span></pre></body></html></div>
-<p>rowData(mibi) doesn’t have cell IDs, so we add it.</p>
-<div class="sourceCode" id="cb24"><html><body><pre class="r"><span class="fu">colData</span>(<span class="no">mibi</span>)$<span class="no">cell_id</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"mibi_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html">seq</a></span>(<span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">mibi</span>)[<span class="fl">2</span>]))
+<p><code>rowData(mibi)</code> does not have cell IDs, so we add it.</p>
+<div class="sourceCode" id="cb21"><html><body><pre class="r"><span class="fu">colData</span>(<span class="no">mibi</span>)$<span class="no">cell_id</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"mibi_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html">seq</a></span>(<span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">mibi</span>)[<span class="fl">2</span>]))
 <span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">mibi</span>) <span class="kw">&lt;-</span> <span class="fu">colData</span>(<span class="no">mibi</span>)$<span class="no">cell_id</span>
 <span class="no">mibi</span>$<span class="no">DONOR_NO</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>$<span class="no">DONOR_NO</span> <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>()</pre></body></html></div>
-<p>There are mibi$SampleID 42, 43, 44 with no DONOR_NO, remove cells from these SampleIDs</p>
-<div class="sourceCode" id="cb25"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>[, !(<span class="no">mibi</span>$<span class="no">SampleID</span> <span class="kw">%in%</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="st">"42"</span>, <span class="st">"43"</span>, <span class="st">"44"</span>))]
+<p>There are mibi$SampleID 42, 43, 44 with no DONOR_NO, and we remove cells from these SampleIDs.</p>
+<div class="sourceCode" id="cb22"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>[, !(<span class="no">mibi</span>$<span class="no">SampleID</span> <span class="kw">%in%</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="st">"42"</span>, <span class="st">"43"</span>, <span class="st">"44"</span>))]
 <span class="no">mibi</span></pre></body></html></div>
-</div>
-<div id="heatmap" class="section level1">
-<h1 class="hasAnchor">
-<a href="#heatmap" class="anchor"></a>heatmap</h1>
-<div class="sourceCode" id="cb26"><html><body><pre class="r"><span class="no">or</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/order.html">order</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/colSums.html">rowMeans</a></span>(<span class="fu">assay</span>(<span class="no">mibi</span>)), <span class="kw">decreasing</span><span class="kw">=</span><span class="fl">TRUE</span>)
+<p>Heatmap of protein expression in tumor and immune cells (50 randomly selected) in randomly selected five patients in MIBI-TOF data.</p>
+<div class="sourceCode" id="cb23"><html><body><pre class="r"><span class="no">or</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/order.html">order</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/colSums.html">rowMeans</a></span>(<span class="fu">assay</span>(<span class="no">mibi</span>)), <span class="kw">decreasing</span><span class="kw">=</span><span class="fl">TRUE</span>)
 
 <span class="no">g</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>$<span class="no">DONOR_NO</span> <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html">factor</a></span>()
 <span class="no">choose_by_patient</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/split.html">split</a></span>(<span class="fu">colData</span>(<span class="no">mibi</span>)<span class="kw">%&gt;%</span> <span class="no">data.frame</span>, <span class="no">g</span>)
@@ -298,14 +317,19 @@
               <span class="kw">fontsize_row</span> <span class="kw">=</span> <span class="fl">14</span>,
               <span class="kw">fontsize_col</span> <span class="kw">=</span> <span class="fl">14</span>,
               <span class="kw">show_colnames</span> <span class="kw">=</span> <span class="fl">FALSE</span>)</pre></body></html></div>
-<div class="sourceCode" id="cb27"><html><body><pre class="r"><span class="no">cell_type</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html">ifelse</a></span>(<span class="no">mibi</span>$<span class="no">immune_group</span> <span class="kw">!=</span> <span class="st">"not immune"</span>, <span class="no">mibi</span>$<span class="no">immune_group</span>, <span class="st">"Tumor"</span>)
+<div class="figure" style="text-align: center">
+<img src="heatmap_MIBI_TOF.png" alt="Heatmap of protein expression in tumor and immune cells in randomly selected five patients in MIBI-TOF data." width="75%"><p class="caption">
+Heatmap of protein expression in tumor and immune cells in randomly selected five patients in MIBI-TOF data.
+</p>
+</div>
+<div class="sourceCode" id="cb24"><html><body><pre class="r"><span class="no">cell_type</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html">ifelse</a></span>(<span class="no">mibi</span>$<span class="no">immune_group</span> <span class="kw">!=</span> <span class="st">"not immune"</span>, <span class="no">mibi</span>$<span class="no">immune_group</span>, <span class="st">"Tumor"</span>)
 <span class="no">mibi</span>$<span class="no">cell_type</span> <span class="kw">&lt;-</span> <span class="no">cell_type</span></pre></body></html></div>
 </div>
-<div id="add-spatial-location" class="section level1">
-<h1 class="hasAnchor">
-<a href="#add-spatial-location" class="anchor"></a>Add spatial location</h1>
-<p>Because we already run this code, we read the saved mae with spatial information</p>
-<div class="sourceCode" id="cb28"><html><body><pre class="r"><span class="no">tiff_file_list</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.files.html">list.files</a></span>(<span class="st">"TNBC_shareCellData/"</span>, <span class="kw">pattern</span> <span class="kw">=</span> <span class="st">".tiff"</span>)
+<div id="spatial-information" class="section level2">
+<h2 class="hasAnchor">
+<a href="#spatial-information" class="anchor"></a>Spatial information</h2>
+<p>Because we already run this code, we read the saved mae (MultiAssayExperiment) with spatial information.</p>
+<div class="sourceCode" id="cb25"><html><body><pre class="r"><span class="no">tiff_file_list</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.files.html">list.files</a></span>(<span class="st">"TNBC_shareCellData/"</span>, <span class="kw">pattern</span> <span class="kw">=</span> <span class="st">".tiff"</span>)
 
 <span class="no">mibi_sample_id_list</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>()
 <span class="kw">for</span>(<span class="no">id</span> <span class="kw">in</span> <span class="fl">1</span>:<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="no">tiff_file_list</span>)){
@@ -348,34 +372,34 @@
 }
 
 <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">saveRDS</a></span>(<span class="no">mibi_spa</span>, <span class="kw">file</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"../Results/mibi_spa.rds"</span>))</pre></body></html></div>
-<div class="sourceCode" id="cb29"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"mibi_spa.rds"</span>)</pre></body></html></div>
-<p>Consider one DONOR from mibi</p>
-<div class="sourceCode" id="cb30"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>[, <span class="no">mibi</span>$<span class="no">DONOR_NO</span> <span class="kw">%in%</span> <span class="st">"30824"</span>]
+<div class="sourceCode" id="cb26"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"mibi_spa.rds"</span>)</pre></body></html></div>
+<p>We choose one DONOR from MIBI-TOF data.</p>
+<div class="sourceCode" id="cb27"><html><body><pre class="r"><span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>[, <span class="no">mibi</span>$<span class="no">DONOR_NO</span> <span class="kw">%in%</span> <span class="st">"30824"</span>]
 <span class="no">mibi</span>
 
 <span class="co">#drop proteins(rows) with no expression in any of these cells</span>
 <span class="no">mibi</span> <span class="kw">&lt;-</span> <span class="no">mibi</span>[<span class="fu"><a href="https://rdrr.io/pkg/raster/man/rowSums.html">rowSums</a></span>(<span class="fu">assay</span>(<span class="no">mibi</span>)) <span class="kw">&gt;</span> <span class="fl">0</span>, ]
 <span class="no">mibi</span></pre></body></html></div>
-<div class="sourceCode" id="cb31"><html><body><pre class="r"><span class="co">#drop proteins(rows) with no expression in any of these cells</span>
+<div class="sourceCode" id="cb28"><html><body><pre class="r"><span class="co">#drop proteins(rows) with no expression in any of these cells</span>
 <span class="no">cd45_sce</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>[<span class="fu"><a href="https://rdrr.io/pkg/raster/man/rowSums.html">rowSums</a></span>(<span class="fu">assay</span>(<span class="no">cd45_sce</span>)) <span class="kw">&gt;</span> <span class="fl">0</span>, ]
 <span class="no">cd45_sce</span></pre></body></html></div>
 </div>
-<div id="multiplicative-error-due-to-different-scales" class="section level1">
-<h1 class="hasAnchor">
-<a href="#multiplicative-error-due-to-different-scales" class="anchor"></a>Multiplicative error due to different scales</h1>
-<p>cd45_sce asinh transformation with cofactor 5</p>
-<div class="sourceCode" id="cb32"><html><body><pre class="r"><span class="no">inv_func</span> <span class="kw">&lt;-</span> <span class="kw">function</span>(<span class="no">x</span>) {
+<div id="multiplicative-error-due-to-different-scales" class="section level2">
+<h2 class="hasAnchor">
+<a href="#multiplicative-error-due-to-different-scales" class="anchor"></a>Multiplicative error due to different scales</h2>
+<p><code>cd45_sce</code> asinh transformation with cofactor 5</p>
+<div class="sourceCode" id="cb29"><html><body><pre class="r"><span class="no">inv_func</span> <span class="kw">&lt;-</span> <span class="kw">function</span>(<span class="no">x</span>) {
   <span class="fl">5</span>*<span class="fu"><a href="https://rdrr.io/r/base/Hyperbolic.html">sinh</a></span>(<span class="no">x</span>)
 }
 <span class="no">cd45_sce_inv</span> <span class="kw">&lt;-</span> <span class="no">cd45_sce</span>
 <span class="fu"><a href="https://rdrr.io/r/base/rm.html">rm</a></span>(<span class="no">cd45_sce</span>)
 <span class="fu">assay</span>(<span class="no">cd45_sce_inv</span>) <span class="kw">&lt;-</span> <span class="fu">inv_func</span>(<span class="fu">assay</span>(<span class="no">cd45_sce_inv</span>))</pre></body></html></div>
-<div id="converting-each-scale-to-have-the-same-lower-and-upper-levels" class="section level2">
-<h2 class="hasAnchor">
-<a href="#converting-each-scale-to-have-the-same-lower-and-upper-levels" class="anchor"></a>Converting each scale to have the same lower and upper levels</h2>
-<p><span class="math inline">\(y = \left(\dfrac{x-x_{\text{min}}}{x_{\text{range}}}\right) \times u\)</span>, where <span class="math inline">\(u\)</span> is the upper limit of the rescaled variable.</p>
-<p>We will scale cd45 and mibi to upper limit of cd45</p>
-<div class="sourceCode" id="cb33"><html><body><pre class="r"><span class="no">u</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html">max</a></span>(<span class="fu">assay</span>(<span class="no">cd45_sce_inv</span>))
+<div id="converting-each-scale-to-have-the-same-lower-and-upper-levels" class="section level3">
+<h3 class="hasAnchor">
+<a href="#converting-each-scale-to-have-the-same-lower-and-upper-levels" class="anchor"></a>Converting each scale to have the same lower and upper levels</h3>
+<p>Let <span class="math inline">\(y\)</span> is the rescaled variable and <span class="math inline">\(x\)</span> is the observed variable. <span class="math inline">\(y = \left(\dfrac{x-x_{\text{min}}}{x_{\text{range}}}\right) \times u\)</span>, where <span class="math inline">\(u\)</span> is the upper limit of the rescaled variable.</p>
+<p>We scale CyTOF and MIBI-TOF to upper limit of CyTOF.</p>
+<div class="sourceCode" id="cb30"><html><body><pre class="r"><span class="no">u</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html">max</a></span>(<span class="fu">assay</span>(<span class="no">cd45_sce_inv</span>))
 <span class="no">x_mibi</span> <span class="kw">&lt;-</span> <span class="fu">assay</span>(<span class="no">mibi</span>)
 <span class="no">y_mibi</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html">apply</a></span>(<span class="no">x_mibi</span>, <span class="fl">1</span>, <span class="kw">function</span>(<span class="no">x</span>){
   <span class="no">xmin</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html">min</a></span>(<span class="no">x</span>)
@@ -385,14 +409,15 @@
 })
 <span class="no">y_mibi</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/transpose.html">t</a></span>(<span class="no">y_mibi</span>)
 
-<span class="co">#y_mibi[is.na(y_mibi)] &lt;- 0</span>
 <span class="fu">assay</span>(<span class="no">mibi</span>) <span class="kw">&lt;-</span> <span class="no">y_mibi</span></pre></body></html></div>
 </div>
 </div>
-<div id="merge-two-singlecellexperiment-objects-and-make-mae" class="section level1">
+</div>
+<div id="merge-two-singlecellexperiment-objects-and-make-multiassayexperiment" class="section level1">
 <h1 class="hasAnchor">
-<a href="#merge-two-singlecellexperiment-objects-and-make-mae" class="anchor"></a>Merge two SingleCellExperiment objects and make mae</h1>
-<div class="sourceCode" id="cb34"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/source.html">source</a></span>(<span class="st">"../R/makeMAEfromSCE.R"</span>)
+<a href="#merge-two-singlecellexperiment-objects-and-make-multiassayexperiment" class="anchor"></a>Merge two <code>SingleCellExperiment</code> objects and make <code>MultiAssayExperiment</code>
+</h1>
+<div class="sourceCode" id="cb31"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/source.html">source</a></span>(<span class="st">"../R/makeMAEfromSCE.R"</span>)
 <span class="no">mae</span> <span class="kw">&lt;-</span> <span class="fu">makeMAEfromSCE</span>(<span class="kw">sce_list</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="no">cd45_sce_inv</span>, <span class="no">mibi</span>),
                       <span class="kw">name_assays</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="st">"cd45"</span>, <span class="st">"mibi"</span>),
                       <span class="kw">sampleID_name</span> <span class="kw">=</span> <span class="st">"cell_ID"</span>)
@@ -401,8 +426,8 @@
 <div id="join-the-assays-and-impute" class="section level1">
 <h1 class="hasAnchor">
 <a href="#join-the-assays-and-impute" class="anchor"></a>Join the assays and impute</h1>
-<p>We already run this code, we read the imputed data</p>
-<div class="sourceCode" id="cb35"><html><body><pre class="r"><span class="no">x1</span> <span class="kw">&lt;-</span> <span class="fu">assay</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"cd45"</span>]]) <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/transpose.html">t</a></span>() <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>()
+<p>We already run this code, so we read the imputed data.</p>
+<div class="sourceCode" id="cb32"><html><body><pre class="r"><span class="no">x1</span> <span class="kw">&lt;-</span> <span class="fu">assay</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"cd45"</span>]]) <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/transpose.html">t</a></span>() <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>()
 <span class="no">x2</span> <span class="kw">&lt;-</span> <span class="fu">assay</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"mibi"</span>]]) <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/transpose.html">t</a></span>() <span class="kw">%&gt;%</span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>()
 <span class="no">x</span> <span class="kw">&lt;-</span>  <span class="fu"><a href="https://dplyr.tidyverse.org/reference/join.html">full_join</a></span>(<span class="no">x1</span>, <span class="no">x2</span>)
 <span class="no">markers</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">x</span>)
@@ -410,37 +435,45 @@
 <span class="no">common_markers</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">x1</span>)[<span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">x1</span>) <span class="kw">%in%</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">x2</span>)]
 <span class="no">common_markers</span>
 
-
 <span class="co"># some features are not recorded in one domain - impute data after scaling</span>
 <span class="no">colMissing</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html">apply</a></span>(<span class="no">x</span>, <span class="fl">2</span>, <span class="kw">function</span>(<span class="no">y</span>){<span class="fu"><a href="https://rdrr.io/r/base/mean.html">mean</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span>(<span class="no">y</span>))})
 
 <span class="no">temp</span> <span class="kw">&lt;-</span> <span class="no">x</span> <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.matrix.html">as.matrix</a></span>() <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/transpose.html">t</a></span>()</pre></body></html></div>
-<div class="sourceCode" id="cb36"><html><body><pre class="r"><span class="no">imdata</span> <span class="kw">&lt;-</span> <span class="kw pkg">impute</span><span class="kw ns">::</span><span class="fu"><a href="https://rdrr.io/pkg/impute/man/impute.knn.html">impute.knn</a></span>(<span class="no">temp</span>, <span class="kw">k</span><span class="kw">=</span><span class="fl">5</span>, <span class="kw">rowmax</span> <span class="kw">=</span> <span class="fl">0.5</span>, <span class="kw">colmax</span> <span class="kw">=</span> <span class="fl">0.9</span>)$<span class="no">data</span> <span class="co"># temp is variables in the rows and samples in the columns</span>
+<div class="sourceCode" id="cb33"><html><body><pre class="r"><span class="no">imdata</span> <span class="kw">&lt;-</span> <span class="kw pkg">impute</span><span class="kw ns">::</span><span class="fu"><a href="https://rdrr.io/pkg/impute/man/impute.knn.html">impute.knn</a></span>(<span class="no">temp</span>, <span class="kw">k</span><span class="kw">=</span><span class="fl">5</span>, <span class="kw">rowmax</span> <span class="kw">=</span> <span class="fl">0.5</span>, <span class="kw">colmax</span> <span class="kw">=</span> <span class="fl">0.9</span>)$<span class="no">data</span> <span class="co"># temp is variables in the rows and samples in the columns</span>
 <span class="co"># x[is.na(x)] &lt;- 0</span>
 <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">saveRDS</a></span>(<span class="no">imdata</span>, <span class="st">"imdata_mibi_cytof_one.rds"</span>)</pre></body></html></div>
-<div class="sourceCode" id="cb37"><html><body><pre class="r"><span class="no">imdata</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"imdata_mibi_cytof_one.rds"</span>)
+<div class="sourceCode" id="cb34"><html><body><pre class="r"><span class="no">imdata</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"imdata_mibi_cytof_one.rds"</span>)
 <span class="no">x</span> <span class="kw">&lt;-</span> <span class="no">imdata</span> <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/transpose.html">t</a></span>()
 <span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x</span>) <span class="kw">&lt;-</span> <span class="no">cells</span></pre></body></html></div>
 </div>
 <div id="topic-modeling" class="section level1">
 <h1 class="hasAnchor">
 <a href="#topic-modeling" class="anchor"></a>Topic modeling</h1>
-<p>Consider test cells</p>
-<div class="sourceCode" id="cb38"><html><body><pre class="r"><span class="no">test_samples</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/sample.html">sample</a></span>(<span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x2</span>), <span class="kw">size</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html">round</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x2</span>))*<span class="fl">0.1</span>, <span class="kw">digits</span> <span class="kw">=</span> <span class="fl">0</span>))
+<div id="split-train-and-test-set" class="section level2">
+<h2 class="hasAnchor">
+<a href="#split-train-and-test-set" class="anchor"></a>Split train and test set</h2>
+<p>For the topic modeling, we keep 10% cells from MIBI-TOF for the test data to choose an optimal number of topics as five based on the posterior log-likelihood.</p>
+<div class="sourceCode" id="cb35"><html><body><pre class="r"><span class="no">test_samples</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/sample.html">sample</a></span>(<span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x2</span>), <span class="kw">size</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html">round</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x2</span>))*<span class="fl">0.1</span>, <span class="kw">digits</span> <span class="kw">=</span> <span class="fl">0</span>))
 <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">saveRDS</a></span>(<span class="no">test_samples</span>, <span class="kw">file</span> <span class="kw">=</span> <span class="st">"test_samples_one_mibi_one_cytof.rds"</span>)</pre></body></html></div>
-<div class="sourceCode" id="cb39"><html><body><pre class="r"><span class="no">test_samples</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"test_samples_one_mibi_one_cytof.rds"</span>)
+<div class="sourceCode" id="cb36"><html><body><pre class="r"><span class="no">test_samples</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="st">"test_samples_one_mibi_one_cytof.rds"</span>)
 <span class="no">x_test_train</span> <span class="kw">&lt;-</span> <span class="no">x</span>
 <span class="no">x_test</span> <span class="kw">&lt;-</span> <span class="no">x</span>[<span class="no">test_samples</span>, ]
 <span class="no">x_test</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html">apply</a></span>(<span class="no">x_test</span> , <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="fl">1</span>,<span class="fl">2</span>), <span class="kw">function</span>(<span class="no">y</span>){<span class="fu"><a href="https://rdrr.io/r/base/integer.html">as.integer</a></span>(<span class="no">y</span>)})
 <span class="no">x_test</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.matrix.html">as.matrix</a></span>(<span class="no">x_test</span>)
-<span class="no">mae_test</span> <span class="kw">&lt;-</span> <span class="no">mae</span>[, <span class="no">test_samples</span>,]
-
-<span class="no">x_train</span> <span class="kw">&lt;-</span> <span class="no">x</span>[!(<span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x</span>) <span class="kw">%in%</span> <span class="no">test_samples</span>), ]
+<span class="no">mae_test</span> <span class="kw">&lt;-</span> <span class="no">mae</span>[, <span class="no">test_samples</span>,]</pre></body></html></div>
+<p>Train dataset</p>
+<div class="sourceCode" id="cb37"><html><body><pre class="r"><span class="no">x_train</span> <span class="kw">&lt;-</span> <span class="no">x</span>[!(<span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x</span>) <span class="kw">%in%</span> <span class="no">test_samples</span>), ]
 <span class="no">x_train</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html">apply</a></span>(<span class="no">x_train</span> , <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="fl">1</span>,<span class="fl">2</span>), <span class="kw">function</span>(<span class="no">y</span>){<span class="fu"><a href="https://rdrr.io/r/base/integer.html">as.integer</a></span>(<span class="no">y</span>)})
 <span class="no">x_train</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.matrix.html">as.matrix</a></span>(<span class="no">x_train</span>)
 <span class="no">mae_train</span> <span class="kw">&lt;-</span> <span class="no">mae</span>[, <span class="fu"><a href="https://rdrr.io/r/base/which.html">which</a></span>(!(<span class="fu"><a href="https://tibble.tidyverse.org/reference/rownames.html">rownames</a></span>(<span class="no">x</span>) <span class="kw">%in%</span> <span class="no">test_samples</span>)),]</pre></body></html></div>
-<div class="sourceCode" id="cb40"><html><body><pre class="r"><span class="co"># theta[d] ~ dirichlet(alpha), alpha pseudocount for each topic</span>
-<span class="co"># beta[k] ~ dirichlet(gamma), gamma pseudocount for each ASV in each topic</span>
+</div>
+<div id="input-for-topic-model" class="section level2">
+<h2 class="hasAnchor">
+<a href="#input-for-topic-model" class="anchor"></a>Input for topic model</h2>
+<p><span class="math inline">\(K\)</span> number of topics, <span class="math inline">\(V\)</span> number of features, <span class="math inline">\(D\)</span> number of cells, <span class="math inline">\(\alpha\)</span> hyperparameter of Dirichlet distribution over topics, <span class="math inline">\(\gamma\)</span> hyperparameter of Dirichlet distribution over features in each topic.</p>
+<p>We set 0.8 for <span class="math inline">\(\alpha\)</span> across all cells and 0.5 for <span class="math inline">\(\beta_{t}, t = 1, 2, \cdots, T\)</span> across all features.</p>
+<div class="sourceCode" id="cb38"><html><body><pre class="r"><span class="co"># theta[d] ~ dirichlet(alpha), alpha pseudocount for each topic</span>
+<span class="co"># beta[k] ~ dirichlet(gamma), gamma pseudocount for each feature in each topic</span>
 <span class="no">stan.data</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="kw">K</span> <span class="kw">=</span> <span class="no">K</span>,
   <span class="kw">V</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">ncol</a></span>(<span class="no">x_train</span>),
   <span class="kw">D</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">nrow</a></span>(<span class="no">x_train</span>),
@@ -448,9 +481,11 @@
   <span class="kw">alpha</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html">rep</a></span>(<span class="fl">.8</span>, <span class="no">K</span>),
   <span class="kw">gamma</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html">rep</a></span>(<span class="fl">.5</span>, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">ncol</a></span>(<span class="no">x_train</span>))
 )</pre></body></html></div>
-<div class="sourceCode" id="cb41"><html><body><pre class="r"><span class="no">fileN</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"LDA_mibi_cytof_one_K_"</span>,<span class="no">K</span>,<span class="st">"_ite_"</span>,<span class="no">iter</span>,<span class="st">".RData"</span>)
+<p>We run the topic model for different <span class="math inline">\(K = 3, 4, 5, 15, 20\)</span>.</p>
+<div class="sourceCode" id="cb39"><html><body><pre class="r"><span class="no">fileN</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"LDA_mibi_cytof_one_K_"</span>,<span class="no">K</span>,<span class="st">"_ite_"</span>,<span class="no">iter</span>,<span class="st">".RData"</span>)
 <span class="no">fileN</span></pre></body></html></div>
-<div class="sourceCode" id="cb42"><html><body><pre class="r"><span class="no">t1</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/proc.time.html">proc.time</a></span>()
+<p>We estimate the parameters using HMC No-U-Turn Sampler (NUTS) with four chains and 2000 iterations. Out of these 2000 iterations, 1000 iterations are used as warm-up samples.</p>
+<div class="sourceCode" id="cb40"><html><body><pre class="r"><span class="no">t1</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/proc.time.html">proc.time</a></span>()
 <span class="no">stan.fit</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/rstan/man/stan.html">stan</a></span>(<span class="kw">file</span> <span class="kw">=</span> <span class="st">"./lda.stan"</span>,
   <span class="kw">data</span> <span class="kw">=</span> <span class="no">stan.data</span>,
   <span class="kw">iter</span> <span class="kw">=</span> <span class="no">iter</span>,
@@ -464,9 +499,9 @@
 <span class="fu"><a href="https://rdrr.io/r/base/proc.time.html">proc.time</a></span>() - <span class="no">t1</span>
 
 <span class="fu"><a href="https://rdrr.io/r/base/save.html">save</a></span>(<span class="no">stan.fit</span>, <span class="kw">file</span> <span class="kw">=</span> <span class="no">fileN</span>)</pre></body></html></div>
-<div class="sourceCode" id="cb43"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/load.html">load</a></span>(<span class="kw">file</span> <span class="kw">=</span> <span class="no">fileN</span>)</pre></body></html></div>
-<p>Sampler diagnostics</p>
-<div class="sourceCode" id="cb44"><html><body><pre class="r"><span class="no">sampler_params</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/rstan/man/stanfit-class.html">get_sampler_params</a></span>(<span class="no">stan.fit</span>,
+<div class="sourceCode" id="cb41"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/load.html">load</a></span>(<span class="kw">file</span> <span class="kw">=</span> <span class="no">fileN</span>)</pre></body></html></div>
+<p>Sampler diagnostics:</p>
+<div class="sourceCode" id="cb42"><html><body><pre class="r"><span class="no">sampler_params</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/rstan/man/stanfit-class.html">get_sampler_params</a></span>(<span class="no">stan.fit</span>,
                                      <span class="kw">inc_warmup</span> <span class="kw">=</span> <span class="fl">FALSE</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/colnames.html">colnames</a></span>(<span class="no">sampler_params</span><span class="kw">[[</span><span class="fl">1</span>]])
 
@@ -478,24 +513,22 @@
                                  <span class="kw">function</span>(<span class="no">x</span>) <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html">max</a></span>(<span class="no">x</span>[, <span class="st">"treedepth__"</span>]))
 <span class="no">max_treedepth_by_chain</span></pre></body></html></div>
 </div>
-<div id="visualization" class="section level1">
-<h1 class="hasAnchor">
-<a href="#visualization" class="anchor"></a>Visualization</h1>
-<div id="extract-posterior-samples" class="section level2">
+<div id="visualization" class="section level2">
 <h2 class="hasAnchor">
-<a href="#extract-posterior-samples" class="anchor"></a>Extract posterior samples</h2>
-<div class="sourceCode" id="cb45"><html><body><pre class="r"><span class="no">samples</span> <span class="kw">&lt;-</span> <span class="kw pkg">rstan</span><span class="kw ns">::</span><span class="fu"><a href="https://rdrr.io/pkg/rstan/man/stanfit-method-extract.html">extract</a></span>(<span class="no">stan.fit</span>,
+<a href="#visualization" class="anchor"></a>Visualization</h2>
+<div id="extract-posterior-samples" class="section level3">
+<h3 class="hasAnchor">
+<a href="#extract-posterior-samples" class="anchor"></a>Extract posterior samples</h3>
+<div class="sourceCode" id="cb43"><html><body><pre class="r"><span class="no">samples</span> <span class="kw">&lt;-</span> <span class="kw pkg">rstan</span><span class="kw ns">::</span><span class="fu"><a href="https://rdrr.io/pkg/rstan/man/stanfit-method-extract.html">extract</a></span>(<span class="no">stan.fit</span>,
                           <span class="kw">permuted</span> <span class="kw">=</span> <span class="fl">TRUE</span>,
                           <span class="kw">inc_warmup</span> <span class="kw">=</span> <span class="fl">FALSE</span>,
                           <span class="kw">include</span> <span class="kw">=</span> <span class="fl">TRUE</span>)<span class="co"># samples is a list</span></pre></body></html></div>
 </div>
-<div id="alignment" class="section level2">
-<h2 class="hasAnchor">
-<a href="#alignment" class="anchor"></a>Alignment</h2>
-<ul>
-<li>Create a Topic <span class="math inline">\(*\)</span> Chain matrix</li>
-</ul>
-<div class="sourceCode" id="cb46"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/source.html">source</a></span>(<span class="st">"../R/alignmentMatrixMAE.R"</span>)
+<div id="alignment" class="section level3">
+<h3 class="hasAnchor">
+<a href="#alignment" class="anchor"></a>Alignment</h3>
+<p>Due to the label-switching problem across chains, it is not possible directly computing conditional log posterior <span class="math inline">\(\hat{R}\)</span> (split), effective sample size for model assessment, and evaluating convergence and mixing of chains. To address this issue, we fix the order of topics in chain one and then find the permutation that aligns the topics across four chains. For each chain two to four, we identify the estimated topics pair with the highest correlation, then find the next highest pair among the remaining, and so forth.</p>
+<div class="sourceCode" id="cb44"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/source.html">source</a></span>(<span class="st">"../R/alignmentMatrixMAE.R"</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/source.html">source</a></span>(<span class="st">"../R/thetaAligned.R"</span>)
 <span class="no">theta</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">theta</span>
 <span class="no">aligned</span> <span class="kw">&lt;-</span> <span class="fu">alignmentMatrixMAE</span>(<span class="no">theta</span>,
@@ -526,7 +559,7 @@
 
 <span class="no">theta_all</span>$<span class="no">cell_type</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html">factor</a></span>(<span class="no">theta_all</span>$<span class="no">cell_type</span>)
 <span class="no">theta_all</span>$<span class="no">method</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html">ifelse</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span>(<span class="no">theta_all</span>$<span class="no">cell_type</span>), <span class="st">"cytof"</span>, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>(<span class="no">theta_all</span>$<span class="no">cell_type</span>))</pre></body></html></div>
-<div class="sourceCode" id="cb47"><html><body><pre class="r"><span class="no">manual_col</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/ggthemes/man/tableau_color_pal.html">tableau_color_pal</a></span>(<span class="st">"Classic 20"</span>)(<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/unique.html">unique</a></span>(<span class="no">theta_all</span>$<span class="no">method</span>)))
+<div class="sourceCode" id="cb45"><html><body><pre class="r"><span class="no">manual_col</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/ggthemes/man/tableau_color_pal.html">tableau_color_pal</a></span>(<span class="st">"Classic 20"</span>)(<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/unique.html">unique</a></span>(<span class="no">theta_all</span>$<span class="no">method</span>)))
 
 <span class="no">theta_summary</span> <span class="kw">&lt;-</span> <span class="no">theta_all</span> <span class="kw">%&gt;%</span>
   <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by</a></span>(<span class="no">Sample</span>, <span class="no">Topic</span>, <span class="no">method</span>) <span class="kw">%&gt;%</span>
@@ -560,11 +593,16 @@
 <span class="no">p</span>
 
 <span class="co"># ggsave(paste0("topic_dis_mibi_cytof_one_K_",K, ".png"), p, width = 20, height = 6)</span></pre></body></html></div>
+<div class="figure" style="text-align: center">
+<img src="topic_dis_mibi_cytof_one_K_5.png" alt="Topic distribution in each cell. With the five topics, the first topic is dominated in most of the immune cells from CyTOF data, and other topics are dominated in other cell types from MIBI-TOF data." width="75%"><p class="caption">
+Topic distribution in each cell. With the five topics, the first topic is dominated in most of the immune cells from CyTOF data, and other topics are dominated in other cell types from MIBI-TOF data.
+</p>
 </div>
-<div id="marker-distribution" class="section level2">
-<h2 class="hasAnchor">
-<a href="#marker-distribution" class="anchor"></a>Marker distribution</h2>
-<div class="sourceCode" id="cb48"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/source.html">source</a></span>(<span class="st">"../R/betaAligned.R"</span>)
+</div>
+<div id="feature-distribution" class="section level3">
+<h3 class="hasAnchor">
+<a href="#feature-distribution" class="anchor"></a>Feature distribution</h3>
+<div class="sourceCode" id="cb46"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/source.html">source</a></span>(<span class="st">"../R/betaAligned.R"</span>)
 <span class="no">beta</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">beta</span> <span class="co"># an array (iterations *topic * marker)</span>
 <span class="no">beta_aligned</span> <span class="kw">&lt;-</span> <span class="fu">betaAligned</span>(<span class="no">beta</span>,
                             <span class="no">K</span>,
@@ -604,7 +642,7 @@
 
 <span class="no">beta_subset</span> <span class="kw">&lt;-</span> <span class="no">beta_summary</span>
 <span class="no">beta_subset</span>$<span class="no">marker_ix</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html">rep</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/seq.html">seq_len</a></span>(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">nrow</a></span>(<span class="no">beta_subset</span>) / <span class="no">K</span>), <span class="kw">each</span> <span class="kw">=</span> <span class="no">K</span>)</pre></body></html></div>
-<div class="sourceCode" id="cb49"><html><body><pre class="r"><span class="no">beta_subset</span> <span class="kw">&lt;-</span> <span class="no">beta_subset</span> <span class="kw">%&gt;%</span>
+<div class="sourceCode" id="cb47"><html><body><pre class="r"><span class="no">beta_subset</span> <span class="kw">&lt;-</span> <span class="no">beta_subset</span> <span class="kw">%&gt;%</span>
   <span class="fu"><a href="https://rdrr.io/pkg/plyr/man/arrange.html">arrange</a></span>(<span class="no">marker_ix</span>, <span class="no">topic</span>)
 
 <span class="no">beta_subset</span> <span class="kw">&lt;-</span> <span class="no">beta_subset</span> <span class="kw">%&gt;%</span>
@@ -626,18 +664,23 @@
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html">theme</a></span>(<span class="kw">plot.title</span> <span class="kw">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html">element_text</a></span>(<span class="kw">hjust</span> <span class="kw">=</span> <span class="fl">0.5</span>))
 
 <span class="no">p</span>
-<span class="co"># ggsave(paste0("asv_dist_barplot_mibi_cytof_one_K_",K, ".png"), p, width = 13, height = 11)</span></pre></body></html></div>
+<span class="co"># ggsave(paste0("fea_dist_barplot_mibi_cytof_one_K_",K, ".png"), p, width = 13, height = 11)</span></pre></body></html></div>
+<div class="figure" style="text-align: center">
+<img src="fea_dist_barplot_mibi_cytof_one_K_5.png" alt="Marker distribution over topics. CD45 marker has the largest proportion in Topic 1." width="75%"><p class="caption">
+Marker distribution over topics. CD45 marker has the largest proportion in Topic 1.
+</p>
+</div>
+<p>The topic distribution shows that the first topic is dominated in most of the immune cells from CyTOF data; four other topics are dominated in all other cells. Feature distribution shows that cells from MIBI-TOF make five clusters consistently based on the observed and predicted marker expression, but these clusters are not identified with only observed marker expressions.</p>
 </div>
 </div>
-<div id="computing-statistics-after-alignment" class="section level1">
-<h1 class="hasAnchor">
-<a href="#computing-statistics-after-alignment" class="anchor"></a>Computing statistics after alignment</h1>
-<p>Here we use all 2000 iterations</p>
-</div>
-<div id="log-posterior-on-the-test-data" class="section level1">
-<h1 class="hasAnchor">
-<a href="#log-posterior-on-the-test-data" class="anchor"></a>Log posterior on the test data</h1>
-<div class="sourceCode" id="cb50"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/dimnames.html">dimnames</a></span>(<span class="no">x_test</span>) <span class="kw">=</span> <span class="kw">NULL</span>
+<div id="computing-statistics-after-alignment" class="section level2">
+<h2 class="hasAnchor">
+<a href="#computing-statistics-after-alignment" class="anchor"></a>Computing statistics after alignment</h2>
+<div id="log-posterior-on-the-test-data" class="section level3">
+<h3 class="hasAnchor">
+<a href="#log-posterior-on-the-test-data" class="anchor"></a>Log posterior on the test data</h3>
+<p>We save posterior log-likelihood on test for different <span class="math inline">\(K\)</span> on test data.</p>
+<div class="sourceCode" id="cb48"><html><body><pre class="r"><span class="fu"><a href="https://rdrr.io/r/base/dimnames.html">dimnames</a></span>(<span class="no">x_test</span>) <span class="kw">=</span> <span class="kw">NULL</span>
 <span class="no">test_data</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="kw">K</span> <span class="kw">=</span> <span class="no">K</span>,
   <span class="kw">V</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">ncol</a></span>(<span class="no">x_test</span>),
   <span class="kw">D</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/ncell.html">nrow</a></span>(<span class="no">x_test</span>),
@@ -664,7 +707,7 @@
 
 <span class="no">fileN</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"df_lp_test_mibi_cytof_one_K_"</span>, <span class="no">K</span>, <span class="st">".rds"</span>)
 <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">saveRDS</a></span>(<span class="no">df_lp_corrected</span>, <span class="no">fileN</span>)</pre></body></html></div>
-<div class="sourceCode" id="cb51"><html><body><pre class="r"><span class="no">df_lp_corrected_all_K</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>()
+<div class="sourceCode" id="cb49"><html><body><pre class="r"><span class="no">df_lp_corrected_all_K</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>()
 <span class="kw">for</span>(<span class="no">top</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="fl">3</span>:<span class="fl">5</span>, <span class="fl">15</span>,<span class="fl">20</span>)){
   <span class="no">fileN</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"df_lp_test_mibi_cytof_one_K_"</span>, <span class="no">top</span>, <span class="st">".rds"</span>)
   <span class="no">df_lp_corrected</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="no">fileN</span>)
@@ -682,13 +725,17 @@
 
 <span class="no">p</span>
 <span class="co"># ggsave("lp_test_mibi_cytof_one.png", p, width = 7, height = 4)</span></pre></body></html></div>
+<div class="figure" style="text-align: center">
+<img src="lp_test_mibi_cytof_one.png" alt="Posterior log-likelihood on test data." width="75%"><p class="caption">
+Posterior log-likelihood on test data.
+</p>
 </div>
-<div id="convergence-diagnostics" class="section level1">
-<h1 class="hasAnchor">
-<a href="#convergence-diagnostics" class="anchor"></a>Convergence diagnostics</h1>
-<p>Compute <span class="math inline">\(\hat{R}\)</span></p>
-<p>These <span class="math inline">\(\hat{R}\)</span> based on 100 iterations</p>
-<div class="sourceCode" id="cb52"><html><body><pre class="r"><span class="no">Rhat_theta</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html">matrix</a></span>(<span class="kw">nrow</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">2</span>], <span class="kw">ncol</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">3</span>])
+</div>
+<div id="convergence-diagnostics" class="section level3">
+<h3 class="hasAnchor">
+<a href="#convergence-diagnostics" class="anchor"></a>Convergence diagnostics</h3>
+<p>Compute <span class="math inline">\(\hat{R}\)</span>.</p>
+<div class="sourceCode" id="cb50"><html><body><pre class="r"><span class="no">Rhat_theta</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html">matrix</a></span>(<span class="kw">nrow</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">2</span>], <span class="kw">ncol</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">3</span>])
 <span class="no">ESS_bulk_theta</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html">matrix</a></span>(<span class="kw">nrow</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">2</span>], <span class="kw">ncol</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">3</span>])
 <span class="no">ESS_tail_theta</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html">matrix</a></span>(<span class="kw">nrow</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">2</span>], <span class="kw">ncol</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">3</span>])
 <span class="kw">for</span>(<span class="no">sam</span> <span class="kw">in</span> <span class="fl">1</span>:<span class="fu"><a href="https://rdrr.io/pkg/raster/man/dimensions.html">dim</a></span>(<span class="no">theta_aligned</span>)[<span class="fl">2</span>]){
@@ -750,7 +797,7 @@
 
 <span class="co"># ggsave(paste0("/Rhat_mibi_cytof_one_K_",K, ".png"), p_rhat, width = 9, height = 6)</span></pre></body></html></div>
 <p>Compute ESS</p>
-<div class="sourceCode" id="cb53"><html><body><pre class="r"><span class="co"># ESS bulk and ESS tail at least 100 per Markov Chain in order to be reliable and indicate that estimates of respective posterior quantiles are reliable</span>
+<div class="sourceCode" id="cb51"><html><body><pre class="r"><span class="co"># ESS bulk and ESS tail at least 100 per Markov Chain in order to be reliable and indicate that estimates of respective posterior quantiles are reliable</span>
 
 <span class="no">p_ess_bulk</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html">ggplot</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>(<span class="kw">ESS_bulk</span> <span class="kw">=</span> <span class="no">ESS_bulk</span>)) +
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_histogram.html">geom_histogram</a></span>(<span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html">aes</a></span>(<span class="kw">x</span> <span class="kw">=</span> <span class="no">ESS_bulk</span>),
@@ -777,11 +824,18 @@
 
 <span class="no">p_ess_tail</span>
 <span class="co"># ggsave(paste0("ess_tail_mibi_cytof_one_K_",K, ".png"), p_ess_tail, width = 9, height = 6)</span></pre></body></html></div>
+<div class="figure" style="text-align: center">
+<img src="ess_tail_mibi_cytof_one_K_5.png" alt="Effective sample size" width="75%"><p class="caption">
+Effective sample size
+</p>
 </div>
-<div id="model-assesment-on-simulated-data" class="section level1">
-<h1 class="hasAnchor">
-<a href="#model-assesment-on-simulated-data" class="anchor"></a>Model assesment on simulated data</h1>
-<div class="sourceCode" id="cb54"><html><body><pre class="r"><span class="co"># Simulated data</span>
+</div>
+</div>
+<div id="model-assessment-on-simulated-data" class="section level2">
+<h2 class="hasAnchor">
+<a href="#model-assessment-on-simulated-data" class="anchor"></a>Model assessment on simulated data</h2>
+<p>For the model assessment, we simulate data from the fitted model and plot the distribution of the median of protein expression.</p>
+<div class="sourceCode" id="cb52"><html><body><pre class="r"><span class="co"># Simulated data</span>
 <span class="no">x_sim</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">x_sim</span> <span class="co"># iteration * samples * ASVs</span>
 <span class="co"># Choose only the first chain</span>
 <span class="no">x_sim</span> <span class="kw">&lt;-</span> <span class="no">x_sim</span>[<span class="fl">1</span>:(<span class="no">iter</span>/<span class="fl">2</span>), ,] <span class="co"># For each iteration, simulated data is x_sim[i, ,]</span>
@@ -812,16 +866,19 @@
 
 <span class="no">p_hist_obs_sim</span>
 <span class="co"># ggsave(paste0("model_assesment_hist_obs_sim_mibi_cytof_one_K_",K, ".png"), p_hist_obs_sim, width = 12, height = 6)</span></pre></body></html></div>
-<p>The distribution of observed median of each protein expression (first facet) is similar to median of simulated data from the fitted topic model (other facets).</p>
+<div class="figure" style="text-align: center">
+<img src="model_assesment_hist_obs_sim_mibi_cytof_one_K_5.png" alt="Model assessment." width="75%"><p class="caption">
+Model assessment.
+</p>
+</div>
+<p>The distribution of the observed median of each protein expression (first facet) is similar to the median of simulated data from the fitted topic model (other facets).</p>
+</div>
 </div>
 <div id="infer-spatial-location-of-cytof-immune-cells" class="section level1">
 <h1 class="hasAnchor">
-<a href="#infer-spatial-location-of-cytof-immune-cells" class="anchor"></a>Infer spatial location of cytof immune cells</h1>
-<p>We use the sample from the first chain</p>
-<ul>
-<li>Create a Topic <span class="math inline">\(*\)</span> Chain matrix</li>
-</ul>
-<div class="sourceCode" id="cb55"><html><body><pre class="r"><span class="no">theta</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">theta</span>
+<a href="#infer-spatial-location-of-cytof-immune-cells" class="anchor"></a>Infer spatial location of CyTOF immune cells</h1>
+<p>We use the sample from the first chain.</p>
+<div class="sourceCode" id="cb53"><html><body><pre class="r"><span class="no">theta</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">theta</span>
 <span class="no">theta_aligned</span> <span class="kw">&lt;-</span> <span class="no">theta</span>[<span class="fl">1</span>:(<span class="no">iter</span>/<span class="fl">2</span>), ,]
 <span class="fu"><a href="https://rdrr.io/r/base/dimnames.html">dimnames</a></span>(<span class="no">theta_aligned</span>)<span class="kw">[[</span><span class="fl">2</span>]] <span class="kw">&lt;-</span> <span class="no">mae_train</span>$<span class="no">cell_id</span>
 <span class="fu"><a href="https://rdrr.io/r/base/dimnames.html">dimnames</a></span>(<span class="no">theta_aligned</span>)<span class="kw">[[</span><span class="fl">3</span>]] <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"Topic_"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html">seq</a></span>(<span class="fl">1</span>,<span class="no">K</span>)))
@@ -840,8 +897,8 @@
 
 <span class="no">theta_all</span>$<span class="no">cell_type</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html">factor</a></span>(<span class="no">theta_all</span>$<span class="no">cell_type</span>)
 <span class="no">theta_all</span>$<span class="no">method</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html">ifelse</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/NA.html">is.na</a></span>(<span class="no">theta_all</span>$<span class="no">cell_type</span>), <span class="st">"cytof"</span>, <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>(<span class="no">theta_all</span>$<span class="no">cell_type</span>))</pre></body></html></div>
-<p>Based on the median topic distribution identified the most dominated topic in each cell</p>
-<div class="sourceCode" id="cb56"><html><body><pre class="r"><span class="no">theta_summary</span> <span class="kw">&lt;-</span> <span class="no">theta_all</span> <span class="kw">%&gt;%</span>
+<p>Based on the median topic distribution, we identify the most dominant topic in each cell.</p>
+<div class="sourceCode" id="cb54"><html><body><pre class="r"><span class="no">theta_summary</span> <span class="kw">&lt;-</span> <span class="no">theta_all</span> <span class="kw">%&gt;%</span>
   <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html">group_by</a></span>(<span class="no">Sample</span>, <span class="no">Topic</span>, <span class="no">method</span>) <span class="kw">%&gt;%</span>
   <span class="fu"><a href="https://rdrr.io/pkg/plyr/man/summarise.html">summarize</a></span>(<span class="kw">median.topic.dis</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/median.html">median</a></span>(<span class="no">topic.dis</span>)) <span class="kw">%&gt;%</span>
   <span class="fu"><a href="https://dplyr.tidyverse.org/reference/group_by.html">ungroup</a></span>() <span class="kw">%&gt;%</span>
@@ -856,9 +913,9 @@
   )
 
 <span class="co"># saveRDS(theta_summary_2, paste0("../Results/co_location_mibi_cytof_one_K_", K, ".rds"))</span></pre></body></html></div>
-<div class="sourceCode" id="cb57"><html><body><pre class="r"><span class="no">theta_summary_2</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"co_location_mibi_cytof_one_K_"</span>, <span class="no">K</span>, <span class="st">".rds"</span>))</pre></body></html></div>
-<p>MIBI has only one site so we may not be able to infer spatial location for some cells in CyTOF.</p>
-<div class="sourceCode" id="cb58"><html><body><pre class="r"><span class="co"># mibi X, Y coordinates</span>
+<div class="sourceCode" id="cb55"><html><body><pre class="r"><span class="no">theta_summary_2</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html">readRDS</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span>(<span class="st">"co_location_mibi_cytof_one_K_"</span>, <span class="no">K</span>, <span class="st">".rds"</span>))</pre></body></html></div>
+<p>MIBI has only one site, so we may not infer spatial location for some cells in CyTOF.</p>
+<div class="sourceCode" id="cb56"><html><body><pre class="r"><span class="co"># mibi X, Y coordinates</span>
 <span class="no">df</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>(<span class="kw">Sample</span> <span class="kw">=</span> <span class="no">mae_train</span>$<span class="no">cell_id</span>, <span class="kw">X</span> <span class="kw">=</span> <span class="no">mae_train</span>$<span class="no">centroid_X</span>, <span class="kw">Y</span> <span class="kw">=</span> <span class="no">mae_train</span>$<span class="no">centroid_Y</span>)
 <span class="no">df</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://dplyr.tidyverse.org/reference/join.html">left_join</a></span>(<span class="no">theta_summary_2</span>, <span class="no">df</span>, <span class="kw">by</span> <span class="kw">=</span> <span class="st">"Sample"</span>) <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>()
 <span class="no">df</span>$<span class="no">Sample</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>(<span class="no">df</span>$<span class="no">Sample</span>)
@@ -881,8 +938,8 @@
 
   }
 }</pre></body></html></div>
-<p>Plot the spatial location of cytof cells from patient BB028</p>
-<div class="sourceCode" id="cb59"><html><body><pre class="r"><span class="no">manual_col</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/ggthemes/man/tableau_color_pal.html">tableau_color_pal</a></span>(<span class="st">"Classic 20"</span>)(<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/unique.html">unique</a></span>(<span class="no">df</span>$<span class="no">method</span>)))
+<p>Plot the spatial location of CyTOF cells from patient BB028.</p>
+<div class="sourceCode" id="cb57"><html><body><pre class="r"><span class="no">manual_col</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/ggthemes/man/tableau_color_pal.html">tableau_color_pal</a></span>(<span class="st">"Classic 20"</span>)(<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/unique.html">unique</a></span>(<span class="no">df</span>$<span class="no">method</span>)))
 <span class="no">df</span>$<span class="no">method</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html">factor</a></span>(<span class="no">df</span>$<span class="no">method</span>)
 <span class="no">df_cytof</span> <span class="kw">&lt;-</span> <span class="kw pkg">dplyr</span><span class="kw ns">::</span><span class="fu"><a href="https://dplyr.tidyverse.org/reference/filter.html">filter</a></span>(<span class="no">df</span>, <span class="no">method</span> <span class="kw">==</span> <span class="st">"cytof"</span>)
 <span class="no">p_co</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html">ggplot</a></span>(<span class="kw">data</span> <span class="kw">=</span> <span class="no">df</span>) +
@@ -898,11 +955,16 @@
 <span class="no">p_co</span>
 
 <span class="co"># ggsave(paste0("co_location_mibi_cytof_one_K_", K, ".png"), p_co, width = 15, height = 15)</span></pre></body></html></div>
+<div class="figure" style="text-align: center">
+<img src="co_location_mibi_cytof_one_K_5.png" alt="Labels show the inferred co-location of immune cells from CyTOF data (some are overlapping). We assign the spatial location of MIBI-TOF cells to the CyTOF data based on each cell's topic distribution." width="75%"><p class="caption">
+Labels show the inferred co-location of immune cells from CyTOF data (some are overlapping). We assign the spatial location of MIBI-TOF cells to the CyTOF data based on each cell’s topic distribution.
+</p>
+</div>
 </div>
 <div id="predict-spatial-pattern-of-proteins-not-measured-in-the-mibi-tof" class="section level1">
 <h1 class="hasAnchor">
 <a href="#predict-spatial-pattern-of-proteins-not-measured-in-the-mibi-tof" class="anchor"></a>Predict spatial pattern of proteins not measured in the MIBI-TOF</h1>
-<div class="sourceCode" id="cb60"><html><body><pre class="r"><span class="no">proteins_not_measured_mibi</span> <span class="kw">&lt;-</span> <span class="fu">rowData</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"cd45"</span>]])$<span class="no">marker_name</span>[!(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>(<span class="fu">rowData</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"cd45"</span>]])$<span class="no">marker_name</span>) <span class="kw">%in%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>(<span class="fu">rowData</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"mibi"</span>]])$<span class="no">channel_name</span>))] <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>()
+<div class="sourceCode" id="cb58"><html><body><pre class="r"><span class="no">proteins_not_measured_mibi</span> <span class="kw">&lt;-</span> <span class="fu">rowData</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"cd45"</span>]])$<span class="no">marker_name</span>[!(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>(<span class="fu">rowData</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"cd45"</span>]])$<span class="no">marker_name</span>) <span class="kw">%in%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>(<span class="fu">rowData</span>(<span class="no">mae</span><span class="kw">[[</span><span class="st">"mibi"</span>]])$<span class="no">channel_name</span>))] <span class="kw">%&gt;%</span> <span class="fu"><a href="https://rdrr.io/pkg/raster/man/as.character.html">as.character</a></span>()
 
 <span class="co"># Simulated data</span>
 <span class="no">x_sim</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">x_sim</span> <span class="co"># iteration * samples * ASVs</span>
@@ -941,7 +1003,7 @@
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html">ggtitle</a></span>(<span class="st">"UMAP with measured proteins"</span>) +
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html">theme</a></span>(<span class="kw">aspect.ratio</span> <span class="kw">=</span> <span class="fl">1</span>, <span class="kw">plot.title</span> <span class="kw">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html">element_text</a></span>(<span class="kw">hjust</span> <span class="kw">=</span> <span class="fl">0.5</span>))
 <span class="no">p1</span></pre></body></html></div>
-<div class="sourceCode" id="cb61"><html><body><pre class="r"><span class="co"># Simulated data</span>
+<div class="sourceCode" id="cb59"><html><body><pre class="r"><span class="co"># Simulated data</span>
 <span class="no">x_sim</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">x_sim</span> <span class="co"># iteration * samples * ASVs</span>
 <span class="co"># Choose only the first chain</span>
 <span class="no">x_sim</span> <span class="kw">&lt;-</span> <span class="no">x_sim</span>[<span class="fl">4</span>, ,] <span class="co"># For each iteration, simulated data </span>
@@ -962,8 +1024,7 @@
 <span class="no">manual_col</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/ggthemes/man/tableau_color_pal.html">tableau_color_pal</a></span>(<span class="st">"Classic 20"</span>)(<span class="fu"><a href="https://rdrr.io/r/base/length.html">length</a></span>(<span class="fu"><a href="https://rdrr.io/pkg/raster/man/unique.html">unique</a></span>(<span class="no">mae_train</span>$<span class="no">cell_type</span>)))
 
 
-<span class="co"># UMAP of measured and predicted protein</span>
-<span class="co"># UMAP of measured proteins</span>
+<span class="co"># UMAP of measured and predicted protein expression</span>
 <span class="no">mibi_umap</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/uwot/man/umap.html">umap</a></span>(<span class="no">x_sim_mibi_predict_t</span>)
 <span class="no">umap_df</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html">data.frame</a></span>(<span class="kw">UMAP1</span> <span class="kw">=</span> <span class="no">mibi_umap</span>[,<span class="fl">1</span>],
                       <span class="kw">UMAP2</span> <span class="kw">=</span> <span class="no">mibi_umap</span>[,<span class="fl">2</span>],
@@ -982,7 +1043,7 @@
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html">ggtitle</a></span>(<span class="st">"UMAP with measured and predicted proteins"</span>) +
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html">theme</a></span>(<span class="kw">aspect.ratio</span> <span class="kw">=</span> <span class="fl">1</span>, <span class="kw">plot.title</span> <span class="kw">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html">element_text</a></span>(<span class="kw">hjust</span> <span class="kw">=</span> <span class="fl">0.5</span>))
 <span class="no">p22</span></pre></body></html></div>
-<div class="sourceCode" id="cb62"><html><body><pre class="r"><span class="co"># Simulated data</span>
+<div class="sourceCode" id="cb60"><html><body><pre class="r"><span class="co"># Simulated data</span>
 <span class="no">x_sim</span> <span class="kw">&lt;-</span> <span class="no">samples</span>$<span class="no">x_sim</span> <span class="co"># iteration * samples * ASVs</span>
 <span class="co"># Choose only the first chain</span>
 <span class="no">x_sim</span> <span class="kw">&lt;-</span> <span class="no">x_sim</span>[<span class="fl">2</span>, ,] <span class="co"># For each iteration, simulated data </span>
@@ -1024,11 +1085,36 @@
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html">ggtitle</a></span>(<span class="st">"UMAP with measured and predicted proteins"</span>) +
   <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html">theme</a></span>(<span class="kw">aspect.ratio</span> <span class="kw">=</span> <span class="fl">1</span>, <span class="kw">plot.title</span> <span class="kw">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/element.html">element_text</a></span>(<span class="kw">hjust</span> <span class="kw">=</span> <span class="fl">0.5</span>))
 <span class="no">p23</span></pre></body></html></div>
-<div class="sourceCode" id="cb63"><html><body><pre class="r"><span class="no">com_p</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/gridExtra/man/arrangeGrob.html">grid.arrange</a></span>(<span class="no">p1</span>, <span class="fu"><a href="https://rdrr.io/pkg/gridExtra/man/arrangeGrob.html">arrangeGrob</a></span>(<span class="no">p22</span>, <span class="no">p23</span>, <span class="kw">ncol</span><span class="kw">=</span><span class="fl">1</span>), <span class="kw">ncol</span><span class="kw">=</span><span class="fl">2</span>, <span class="kw">widths</span><span class="kw">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="fl">1</span>,<span class="fl">1.2</span>))
-
+<div class="sourceCode" id="cb61"><html><body><pre class="r"><span class="no">com_p</span> <span class="kw">&lt;-</span> <span class="fu"><a href="https://rdrr.io/pkg/gridExtra/man/arrangeGrob.html">grid.arrange</a></span>(<span class="no">p1</span>, <span class="fu"><a href="https://rdrr.io/pkg/gridExtra/man/arrangeGrob.html">arrangeGrob</a></span>(<span class="no">p22</span>, <span class="no">p23</span>, <span class="kw">ncol</span><span class="kw">=</span><span class="fl">1</span>), <span class="kw">ncol</span><span class="kw">=</span><span class="fl">2</span>, <span class="kw">widths</span><span class="kw">=</span><span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="fl">1</span>,<span class="fl">1.2</span>))
 
 <span class="co"># ggsave("predicted_mibi_protein.png", com_p, width = 20, height = 15)</span></pre></body></html></div>
-<p>The clusters of cells are clearly identified when using observed and predicted protein expressions.</p>
+<div class="figure" style="text-align: center">
+<img src="predicted_mibi_protein.png" alt="On the left, the first two dimensions of UMAP on the observed markers in the MIBI-TOF data. On the right, the first two dimensions of UMAP on the simulated data from the fitted model with predicted marker expression were not observed in MIBI-TOF data." width="75%"><p class="caption">
+On the left, the first two dimensions of UMAP on the observed markers in the MIBI-TOF data. On the right, the first two dimensions of UMAP on the simulated data from the fitted model with predicted marker expression were not observed in MIBI-TOF data.
+</p>
+</div>
+<p>The clusters of cells are identified when using observed and predicted protein expressions.</p>
+</div>
+<div id="references" class="section level1 unnumbered">
+<h1 class="hasAnchor">
+<a href="#references" class="anchor"></a>References</h1>
+<div id="refs" class="references">
+<div id="ref-blei2003latent">
+<p>Blei, David M, Andrew Y Ng, and Michael I Jordan. 2003. “Latent Dirichlet Allocation.” <em>Journal of Machine Learning Research</em> 3 (Jan): 993–1022.</p>
+</div>
+<div id="ref-Hastie2019">
+<p>Hastie, Trevor, Robert Tibshirani, Balasubramanian Narasimhan, and Gilbert Chu. 2019. <em>Impute: Impute: Imputation for Microarray Data</em>.</p>
+</div>
+<div id="ref-keren2018">
+<p>Keren, Leeat, Marc Bosse, Diana Marquez, Roshan Angoshtari, Samir Jain, Sushama Varma, Soo-Ryum Yang, et al. 2018. “A Structured Tumor-Immune Microenvironment in Triple Negative Breast Cancer Revealed by Multiplexed Ion Beam Imaging.” <em>Cell</em> 174 (6). Elsevier: 1373–87.</p>
+</div>
+<div id="ref-ramos2017software">
+<p>Ramos, Marcel, Lucas Schiffer, Angela Re, Rimsha Azhar, Azfar Basunia, Carmen Rodriguez, Tiffany Chan, et al. 2017. “Software for the Integration of Multiomics Experiments in Bioconductor.” <em>Cancer Research</em> 77 (21). AACR: e39–e42.</p>
+</div>
+<div id="ref-wagner2019">
+<p>Wagner, Johanna, Maria Anna Rapsomaniki, Stéphane Chevrier, Tobias Anzeneder, Claus Langwieder, August Dykgers, Martin Rees, et al. 2019. “A Single-Cell Atlas of the Tumor and Immune Ecosystem of Human Breast Cancer.” <em>Cell</em> 177 (5). Elsevier: 1330–45.</p>
+</div>
+</div>
 </div>
 <div class="footnotes">
 <hr>

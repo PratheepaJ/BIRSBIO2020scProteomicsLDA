@@ -6,14 +6,29 @@ vignette: >
   %\VignetteIndexEntry{How to Use this Package to integrate Bayesian latent Dirichlet allocation to jointly integrate two targeted proteomics dat}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+bibliography: BIRS.bib
 ---
 
-We use this R Markdown to run the topic modeling. 
+# Introduction
 
-We use iterations 100 for this vignette, but the results for iterations 2000 is available.
+Characterizing the tumor ecosystem in breast cancer patients is vital for identifying prognosis and treatment. Single-cell targeted proteomics methods can quantify protein expression in tumor and immune cells and spatial coordinates of cells. However, the tumor ecosystem is phenotypically and functionally heterogeneous. Thus, we need to consider multiple targeted proteomics methods to deepen our understanding of the breast cancer tumor ecosystem.
+	    
+We propose Bayesian latent Dirichlet allocation to jointly integrate two targeted proteomics data from different breast cancer patients with partially-overlapping proteomic markers. We then use samples drawn from the posterior to infer cell co-location based on the latent topic proportions in cells. We also infer the spatial location of CyTOF cells using the MIBI-TOF.
+
+We illustrated the techniques using the mass cytometry (CyTOF) data of @wagner2019 and multiplexed ion beam imaging- time of flight (MIBI - TOF) data of @keren2018, studies on the tumor and immune ecosystem of human breast cancer patients. This vignette provides R scripts for the analysis.
+		
+# Method
+
+We extend `MultiAssayExperiment` @ramos2017software class to integrate multiple single-cell proteomics data. This container can be used for preprocessing, transformation, extracting spatial information from raster objects, and adding cell information, topic modeling, and visualization. 
+	
+@keren2018 MIBI-TOF data are the size-normalized raw intensity values, arcsinh transformed and standardized across the markers. The distribution of transformed values shows that there are outliers in 32 protein markers. @wagner2019 CyTOF data are arcsinh transformed of intensity values. We do the inverse transformation of  CyTOF data. We then use the upper limit of CyTOF data to scale the MIBI-TOF (normalized) data to the range of CyTOF data. After making the same units in both CyTOF and MIBI-TOF, we impute the protein expression that is not measured in one of the platforms using the nearest neighbor averaging @Hastie2019. We round the protein expression to an integer.
+	
+We use topic modeling to find the dominated topics in CyTOF and MIBI-TOF cells @blei2003latent. We assign the spatial location of MIBI-TOF cells to the CyTOF data based on the topic distribution in each cell (if the difference between the topic distribution of the dominated topic in the CyTOF and the dominated topic in the MIBI-TOF is the minimum.) We infer the spatial location of CyTOF cells using the MIBI-TOF (one patient, but we can increase the number of patients). We plot the spatial co-location of CyTOF cells related to the MIBI-TOF spatial location.
+	
+We use fitted topic modeling to simulate data that gives us the predicted value for MIBI-TOF markers that are not observed. 
 
 
-
+# Results
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,
   message = FALSE,
@@ -22,13 +37,18 @@ knitr::opts_chunk$set(echo = TRUE,
   fig.height = 15)
 ```
 
-```{r read_arg}
+## Subject selection
+
+We choose one patient from CyTOF (Live cells: immune panel) and one patient from MIBI-TOF, but the ideal is to use MIBI-TOF data from the same patient. For the topic modeling, we keep 10\% cells from MIBI-TOF for the test data to choose an optimal number of topics as five $\left(K=5\right)$ based on the posterior log-likelihood. 
+
+```{r eval=FALSE}
 K <- 5
 K
-iter <- 100
+iter <- 2000
 iter
 ```
 
+We load the required packages for the analysis.
 ```{r}
 library(SingleCellExperiment)
 library(ggplot2)
@@ -52,23 +72,23 @@ library(uwot)
 library(gridExtra)
 ```
 
-# CyTOF
+## Data
 - Wagner 2018 Cytof
-  - 140 breast cancer patients; Of 140, 6 tripple negative (TN)
+  - 140 breast cancer patients; Of 140, 6 triple negative (TN)
   - cd45_sce_dropna$Clinical.Subtype == "TN
   - 3 cancer-free
   - 73 protein markers in immune-centric and tumor-centric microenvironment
   
-- Keren 2018 Multiplex Ion Bean Imaging (MIBI)
+- Keren 2018 Multiplex Ion Bean Imaging (MIBI-TOF)
   - Tumor-immune microenvironment in TN patients
   - 41 TN patients
   - 36 proteins
   
-We will choose patients with TN with immune and tumor cells in both CyTOF and MIBI for the integrative analysis.
+**Note**: To create MultiAssayExperiment, we choose patients with TN with immune and tumor cells in both CyTOF and MIBI-TOF. Then, we select one patient from each CyTOF and MIBI-TOF for the integrative analysis.
 
-# Mass-Tag CyTOF Breast Cancer Data
+## Mass-Tag CyTOF Breast Cancer Data
 
-- For this analysis we use **cd45.sce**: CD45+ cells from the live cells; downsampled to 426,872 cells (assayed on immune panel) $\times$ 35 proteins
+We use **cd45.sce**: CD45+ cells from the live cells; down-sampled to 426,872 cells (assayed on immune panel) $\times$ 35 proteins.
 
 ```{r eval=FALSE}
 load("masstagSCE.rda")
@@ -76,7 +96,8 @@ cd45.sce # 38 * 426872
 rm(epith.sce, livecells.sce, myeloid.sce, tcell.sce)
 ```
 
-Drop the five subjects without any clinical data. We can use Gender variable to identify those subjects
+We drop the five patients without any clinical data. We can use the `Gender` variable to identify those patients.
+
 ```{r eval=FALSE}
 unique(colData(cd45.sce)$patient_id.y[which(is.na(colData(cd45.sce)$Gender))])
 
@@ -90,34 +111,33 @@ rm(cd45.sce, cd45_to_keep)
 saveRDS(cd45.sce_dropna, "cd45_sce_dropna.rds")
 ```
 
-```{r include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
-```
 
-```{r}
+```{r eval=FALSE}
 cd45_sce <- readRDS("cd45_sce_dropna.rds")
 cd45_sce
 ```
 
-There are three proteins without gene symbol in cd45_sce_dropna so we drop them (non-protein channels for cisplatin and DNA tags that are included)
-```{r}
+There are three proteins without gene symbol in `cd45_sce_dropna`, so we drop them (non-protein channels for cisplatin and DNA tags included.)
+
+```{r eval=FALSE}
 cd45_sce <- cd45_sce[!(rowData(cd45_sce)$hgnc_symbol == "na") ,]
 cd45_sce
 ```
 
-There are two different health status 
-```{r}
+There are two different health status. 
+```{r eval=FALSE}
 table(colData(cd45_sce)$Health.Status)
-
 ```
 
-There are five different clinical subtypes of cancer patients, including TN and healthy 
-```{r}
+There are five different clinical subtypes of cancer patients, including TN and healthy. 
+
+```{r eval=FALSE}
 table(colData(cd45_sce)$Clinical.Subtype)
 ```
 
-Subset TN clinical subtype
-```{r}
+We subset TN clinical subtype.
+
+```{r eval=FALSE}
 cd45_sce <- cd45_sce[, cd45_sce$Clinical.Subtype == "TN"]
 cd45_sce
 #drop cells(columns) with no protein expression
@@ -127,27 +147,30 @@ cd45_sce
 cd45_sce$patient_id.x <- droplevels(cd45_sce$patient_id.x)
 ```
 
-There are six TN patients and two had previous cancer incidence
-```{r}
+There are six TN patients, and among them, two had previous cancer incidence.
+
+```{r eval=FALSE}
 table(cd45_sce$Previous.Cancer.Incidences, cd45_sce$patient_id.x)
 ```
 
-Let's choose subject BB028 and will see whether we can infer co-location of immune cells.
+We choose patient **BB028** and infer the co-location of immune cells in the CyTOF data using MIBI-TOF data.
 
-```{r}
+```{r eval=FALSE}
 cd45_sce <- cd45_sce[ , cd45_sce$patient_id.x == "BB028"]
 cd45_sce
 ```
 
-Add cell id's to CyTOF 
-```{r}
+We add cell ids to CyTOF. 
+
+```{r eval=FALSE}
 cd45_sce$cell_id <- paste0("cytof_", seq(1, dim(cd45_sce)[2]))
 colnames(cd45_sce) <- cd45_sce$cell_id
 ```
 
 
-heatmap
-```{r}
+Heatmap of the protein expression in each cell of patient **BB028**.
+
+```{r eval=FALSE}
 or <- order(rowMeans(assay(cd45_sce)), decreasing=TRUE)
 ass <- assay(cd45_sce)[or, ]
 
@@ -168,13 +191,16 @@ p <- pheatmap(ass,
               show_colnames = FALSE)
 ```
 
-# Keren et al., MIBI-TOF Breast Cancer Data 
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Heatmap of the protein expression in each cell of patient **BB028**.", echo=FALSE}
+knitr::include_graphics("heatmap_BB028_CyTOF.png")
+```
 
+## Keren et al., MIBI-TOF Breast Cancer Data 
 
 - All 39 patients were TN 
 - The size-normalized raw intensity values are then arcsinh transformed and standardized across the markers. 
 
-```{r}
+```{r eval=FALSE}
 load('mibiSCE.rda')
 mibi.sce
 
@@ -184,18 +210,16 @@ rowSds(assay(mibi.sce))
 rowMax(assay(mibi.sce))
 ```
 
-Rows correspond to channels and columns correspond to cells.
-We can see all of the channels that were collected in this experiment:
+Rows correspond to channels, and columns correspond to cells.
+We can see all of the channels that were collected in this experiment.
 
-```{r}
+```{r eval=FALSE}
 rownames(mibi.sce)
 ```
 
+The 38 proteins can be easily identified by using the binary attribute `is_protein` from `rowData` (The other 11 comprise background, experimental controls (e.g., Au and dsDNA), and elements of potential interest in studying cellular mechanisms (e.g., Ca, Fe; relevant in other spatial studies.)
 
-
-The 38 proteins can be easily identified by using the binary attribute is_protein from rowData (The other 11 comprise background, experimental controls (e.g, Au and dsDNA), and elements of potential interest in studying cellular mechanisms (e.g., Ca, Fe; relevant in other spatial studies))
-
-```{r}
+```{r eval=FALSE}
 mibi.sce_proteins <- mibi.sce[rowData(mibi.sce)$is_protein == 1,]
 mibi.sce_proteins
 rm(mibi.sce)
@@ -207,32 +231,31 @@ rowMax(assay(mibi.sce_proteins))
 ```
 
 
-Cell type information is availble in the columns *tumor_group* and *immune_group* . That is, 51% of cells were Keratin positive tumor cells and 41% of cells were immune cells.
+Cell type information is available in the columns *tumor_group* and *immune_group*. That is, 51\% of cells were Keratin positive tumor cells, and 41\% of cells were immune cells.
 
-```{r}
+```{r eval=FALSE}
 round(table(mibi.sce_proteins$tumor_group)/ncol(mibi.sce_proteins),2)
 ```
 
 
-Among the immune cells, macrophages and CD8, CD4+ T-cells and other immune cells were identified.  10% of all cells assayed were macrophages
+Among the immune cells, macrophages, and CD8, CD4+ T-cells and other immune cells were identified.  10\% of all cells assayed were macrophages.
 
-```{r}
+
+```{r eval=FALSE}
 # Immune Cells
 round(table(mibi.sce_proteins$immune_group)/ncol(mibi.sce_proteins),2)
 ```
 
-Consider Keratin positive tumor cells and immune cells (there are different immune cell types within immune cells)
-```{r}
+We consider Keratin positive tumor cells and immune cells (there are different immune cell types within immune cells.)
+
+```{r eval=FALSE}
 table(colData(mibi.sce_proteins)$tumor_group)
 table(colData(mibi.sce_proteins)$tumor_group, colData(mibi.sce_proteins)$immune_group)
 
 mibi.sce_proteins <- mibi.sce_proteins[, colData(mibi.sce_proteins)$tumor_group %in% c("Immune", "Keratin-positive tumor")]
 ```
 
-
-
-heatmap of protein expression in tumor and immune cells 
-```{r}
+```{r eval=FALSE}
 mibi <- mibi.sce_proteins
 mibi
 #drop cells(columns) with no protein expression
@@ -243,24 +266,23 @@ mibi <- mibi[rowSums(assay(mibi)) > 0, ]
 mibi
 ```
 
-
-rowData(mibi) doesn't have cell IDs, so we add it.
-```{r}
+`rowData(mibi)` does not have cell IDs, so we add it.
+```{r eval=FALSE}
 colData(mibi)$cell_id <- paste0("mibi_", seq(1, dim(mibi)[2]))
 colnames(mibi) <- colData(mibi)$cell_id
 mibi$DONOR_NO <- mibi$DONOR_NO %>% as.character()
 ```
 
-There are mibi$SampleID 42, 43, 44 with no DONOR_NO, remove cells from these SampleIDs
-```{r}
+There are mibi$SampleID 42, 43, 44 with no DONOR_NO, and we remove cells from these SampleIDs.
+
+```{r eval=FALSE}
 mibi <- mibi[, !(mibi$SampleID %in% c("42", "43", "44"))]
 mibi
 ```
 
+Heatmap of protein expression in tumor and immune cells (50 randomly selected) in randomly selected five patients in MIBI-TOF data.
 
-
-# heatmap 
-```{r}
+```{r eval=FALSE}
 or <- order(rowMeans(assay(mibi)), decreasing=TRUE)
 
 g <- mibi$DONOR_NO %>% factor()
@@ -306,18 +328,19 @@ p <- pheatmap(ass,
               fontsize_col = 14, 
               show_colnames = FALSE)
 
-
-
 ```
 
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Heatmap of protein expression in tumor and immune cells in randomly selected five patients in MIBI-TOF data.", echo=FALSE}
+knitr::include_graphics("heatmap_MIBI_TOF.png")
+```
 
-```{r}
+```{r eval=FALSE}
 cell_type <- ifelse(mibi$immune_group != "not immune", mibi$immune_group, "Tumor")
 mibi$cell_type <- cell_type
 ```
 
-# Add spatial location
-Because we already run this code, we read the saved mae with spatial information
+## Spatial information
+Because we already run this code, we read the saved mae (MultiAssayExperiment) with spatial information.
 ```{r eval=FALSE}
 tiff_file_list <- list.files("TNBC_shareCellData/", pattern = ".tiff")
 
@@ -365,12 +388,12 @@ saveRDS(mibi_spa, file = paste0("../Results/mibi_spa.rds"))
 ```
 
 
-```{r}
+```{r eval=FALSE}
 mibi <- readRDS("mibi_spa.rds")
 ```
 
-Consider one DONOR from mibi
-```{r}
+We choose one DONOR from MIBI-TOF data. 
+```{r eval=FALSE}
 mibi <- mibi[, mibi$DONOR_NO %in% "30824"]
 mibi
 
@@ -379,17 +402,17 @@ mibi <- mibi[rowSums(assay(mibi)) > 0, ]
 mibi
 ```
 
-```{r}
+```{r eval=FALSE}
 #drop proteins(rows) with no expression in any of these cells
 cd45_sce <- cd45_sce[rowSums(assay(cd45_sce)) > 0, ]
 cd45_sce
 ```
 
 
-# Multiplicative error due to different scales
+## Multiplicative error due to different scales
 
-cd45_sce asinh transformation with cofactor 5 
-```{r}
+`cd45_sce` asinh transformation with cofactor 5 
+```{r eval=FALSE}
 inv_func <- function(x) {
   5*sinh(x)
 }
@@ -399,12 +422,13 @@ assay(cd45_sce_inv) <- inv_func(assay(cd45_sce_inv))
 ```
 
 
-## Converting each scale to have the same lower and upper levels
+### Converting each scale to have the same lower and upper levels
 
+Let $y$ is the rescaled variable and $x$ is the observed variable.
 $y = \left(\dfrac{x-x_{\text{min}}}{x_{\text{range}}}\right) \times u$, where $u$ is the upper limit of the rescaled variable.
 
-We will scale cd45 and mibi to upper limit of cd45
-```{r}
+We scale CyTOF and MIBI-TOF to upper limit of CyTOF.
+```{r eval=FALSE}
 u <- max(assay(cd45_sce_inv))
 x_mibi <- assay(mibi) 
 y_mibi <- apply(x_mibi, 1, function(x){
@@ -415,12 +439,12 @@ y_mibi <- apply(x_mibi, 1, function(x){
 })
 y_mibi <- t(y_mibi)
 
-#y_mibi[is.na(y_mibi)] <- 0
 assay(mibi) <- y_mibi
 ```
 
-# Merge two SingleCellExperiment objects and make mae
-```{r}
+# Merge two `SingleCellExperiment` objects and make `MultiAssayExperiment`
+
+```{r eval=FALSE}
 source("../R/makeMAEfromSCE.R")
 mae <- makeMAEfromSCE(sce_list = list(cd45_sce_inv, mibi), 
                       name_assays = c("cd45", "mibi"),
@@ -431,8 +455,8 @@ mae
 
 # Join the assays and impute
 
-We already run this code, we read the imputed data
-```{r}
+We already run this code, so we read the imputed data.
+```{r eval=FALSE}
 x1 <- assay(mae[["cd45"]]) %>% t() %>% data.frame()
 x2 <- assay(mae[["mibi"]]) %>% t() %>%  data.frame()
 x <-  full_join(x1, x2)
@@ -441,22 +465,19 @@ cells <- c(rownames(x1), rownames(x2))
 common_markers <- colnames(x1)[colnames(x1) %in% colnames(x2)]
 common_markers
 
-
 # some features are not recorded in one domain - impute data after scaling
 colMissing <- apply(x, 2, function(y){mean(is.na(y))})
 
 temp <- x %>% as.matrix() %>% t()
-
 ```
 
 ```{r eval=FALSE}
 imdata <- impute::impute.knn(temp, k=5, rowmax = 0.5, colmax = 0.9)$data # temp is variables in the rows and samples in the columns
 # x[is.na(x)] <- 0
 saveRDS(imdata, "imdata_mibi_cytof_one.rds")
-
 ```
 
-```{r}
+```{r eval=FALSE}
 imdata <- readRDS("imdata_mibi_cytof_one.rds")
 x <- imdata %>% t()
 rownames(x) <- cells
@@ -465,14 +486,16 @@ rownames(x) <- cells
 
 # Topic modeling
 
+## Split train and test set
 
-Consider test cells
+For the topic modeling, we keep 10\% cells from MIBI-TOF for the test data to choose an optimal number of topics as five based on the posterior log-likelihood. 
+
 ```{r eval=FALSE}
 test_samples <- sample(rownames(x2), size = round(length(rownames(x2))*0.1, digits = 0))
 saveRDS(test_samples, file = "test_samples_one_mibi_one_cytof.rds")
 ```
 
-```{r}
+```{r eval=FALSE}
 test_samples <- readRDS("test_samples_one_mibi_one_cytof.rds")
 x_test_train <- x
 x_test <- x[test_samples, ]
@@ -480,16 +503,25 @@ x_test <- apply(x_test , c(1,2), function(y){as.integer(y)})
 x_test <- as.matrix(x_test)
 mae_test <- mae[, test_samples,]
 
+```
+
+Train dataset
+```{r eval=FALSE}
 x_train <- x[!(rownames(x) %in% test_samples), ]
 x_train <- apply(x_train , c(1,2), function(y){as.integer(y)})
 x_train <- as.matrix(x_train)
 mae_train <- mae[, which(!(rownames(x) %in% test_samples)),]
 ```
 
+## Input for topic model
 
-```{r}
+$K$ number of topics, $V$ number of features, $D$ number of cells, $\alpha$ hyperparameter of Dirichlet distribution over topics, $\gamma$ hyperparameter of Dirichlet distribution over features in each topic. 
+
+We set 0.8 for $\alpha$ across all cells and 0.5 for $\beta_{t}, t = 1, 2, \cdots, T$ across all features. 
+
+```{r eval=FALSE}
 # theta[d] ~ dirichlet(alpha), alpha pseudocount for each topic
-# beta[k] ~ dirichlet(gamma), gamma pseudocount for each ASV in each topic
+# beta[k] ~ dirichlet(gamma), gamma pseudocount for each feature in each topic
 stan.data <- list(K = K, 
   V = ncol(x_train), 
   D = nrow(x_train), 
@@ -499,11 +531,13 @@ stan.data <- list(K = K,
 )
 ```
 
-```{r}
+We run the topic model for different $K = 3, 4, 5, 15, 20$.
+```{r eval=FALSE}
 fileN <- paste0("LDA_mibi_cytof_one_K_",K,"_ite_",iter,".RData")
 fileN
 ```
 
+We estimate the parameters using HMC No-U-Turn Sampler (NUTS) with four chains and 2000 iterations. Out of these 2000 iterations, 1000 iterations are used as warm-up samples.
 ```{r eval=FALSE}
 t1 <- proc.time()
 stan.fit <- stan(file = "./lda.stan", 
@@ -521,12 +555,12 @@ proc.time() - t1
 save(stan.fit, file = fileN)
 ```
 
-```{r}
+```{r eval=FALSE}
 load(file = fileN)
 ```
 
-Sampler diagnostics
-```{r}
+Sampler diagnostics:
+```{r eval=FALSE}
 sampler_params <- get_sampler_params(stan.fit, 
                                      inc_warmup = FALSE)
 colnames(sampler_params[[1]])
@@ -541,19 +575,21 @@ max_treedepth_by_chain
 ```
 
 
-# Visualization 
+## Visualization 
 
-## Extract posterior samples
-```{r}
+### Extract posterior samples
+```{r eval=FALSE}
 samples <- rstan::extract(stan.fit, 
                           permuted = TRUE, 
                           inc_warmup = FALSE, 
                           include = TRUE)# samples is a list
 ```
 
-## Alignment
-- Create a Topic $*$ Chain matrix
-```{r}
+### Alignment
+
+Due to the label-switching problem across chains, it is not possible directly computing conditional log posterior $\hat{R}$ (split), effective sample size for model assessment, and evaluating convergence and mixing of chains. To address this issue, we fix the order of topics in chain one and then find the permutation that aligns the topics across four chains. For each chain two to four, we identify the estimated topics pair with the highest correlation, then find the next highest pair among the remaining, and so forth.
+
+```{r eval=FALSE}
 source("../R/alignmentMatrixMAE.R")
 source("../R/thetaAligned.R")
 theta <- samples$theta 
@@ -587,7 +623,7 @@ theta_all$cell_type <- factor(theta_all$cell_type)
 theta_all$method <- ifelse(is.na(theta_all$cell_type), "cytof", as.character(theta_all$cell_type))
 ```
 
-```{r}
+```{r eval=FALSE}
 manual_col <- tableau_color_pal("Classic 20")(length(unique(theta_all$method)))
 
 theta_summary <- theta_all %>% 
@@ -624,9 +660,13 @@ p
 # ggsave(paste0("topic_dis_mibi_cytof_one_K_",K, ".png"), p, width = 20, height = 6)
 ```
 
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Topic distribution in each cell. With the five topics, the first topic is dominated in most of the immune cells from CyTOF data, and other topics are dominated in other cell types from MIBI-TOF data.", echo=FALSE}
+knitr::include_graphics("topic_dis_mibi_cytof_one_K_5.png")
+```
 
-## Marker distribution
-```{r}
+
+### Feature distribution
+```{r eval=FALSE}
 source("../R/betaAligned.R")
 beta <- samples$beta # an array (iterations *topic * marker)
 beta_aligned <- betaAligned(beta, 
@@ -667,11 +707,10 @@ beta_summary <- beta_hat %>%
 
 beta_subset <- beta_summary
 beta_subset$marker_ix <- rep(seq_len(nrow(beta_subset) / K), each = K)
-
 ```
 
 
-```{r}
+```{r eval=FALSE}
 beta_subset <- beta_subset %>% 
   arrange(marker_ix, topic)
 
@@ -694,17 +733,21 @@ p <- ggplot(beta_subset,
   theme(plot.title = element_text(hjust = 0.5)) 
 
 p
-# ggsave(paste0("asv_dist_barplot_mibi_cytof_one_K_",K, ".png"), p, width = 13, height = 11)
+# ggsave(paste0("fea_dist_barplot_mibi_cytof_one_K_",K, ".png"), p, width = 13, height = 11)
 ```
 
 
-# Computing statistics after alignment
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Marker distribution over topics. CD45 marker has the largest proportion in Topic 1.", echo=FALSE}
+knitr::include_graphics("fea_dist_barplot_mibi_cytof_one_K_5.png")
+```
 
+The topic distribution shows that the first topic is dominated in most of the immune cells from CyTOF data; four other topics are dominated in all other cells. Feature distribution shows that cells from MIBI-TOF make five clusters consistently based on the observed and predicted marker expression, but these clusters are not identified with only observed marker expressions.
 
+## Computing statistics after alignment
 
-Here we use all 2000 iterations
+### Log posterior on the test data
 
-# Log posterior on the test data
+We save posterior log-likelihood on test for different $K$ on test data.
 
 ```{r eval=FALSE}
 dimnames(x_test) = NULL
@@ -737,7 +780,7 @@ saveRDS(df_lp_corrected, fileN)
 ```
 
 
-```{r}
+```{r eval=FALSE}
 df_lp_corrected_all_K <- data.frame()
 for(top in c(3:5, 15,20)){
   fileN <- paste0("df_lp_test_mibi_cytof_one_K_", top, ".rds")
@@ -758,14 +801,16 @@ p
 # ggsave("lp_test_mibi_cytof_one.png", p, width = 7, height = 4)
 ```
 
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Posterior log-likelihood on test data.", echo=FALSE}
+knitr::include_graphics("lp_test_mibi_cytof_one.png")
+```
 
-# Convergence diagnostics
 
-Compute $\hat{R}$
+### Convergence diagnostics
 
-These $\hat{R}$ based on 100 iterations
+Compute $\hat{R}$.
 
-```{r}
+```{r eval=FALSE}
 Rhat_theta <- matrix(nrow = dim(theta_aligned)[2], ncol = dim(theta_aligned)[3])
 ESS_bulk_theta <- matrix(nrow = dim(theta_aligned)[2], ncol = dim(theta_aligned)[3])
 ESS_tail_theta <- matrix(nrow = dim(theta_aligned)[2], ncol = dim(theta_aligned)[3])
@@ -829,9 +874,13 @@ p_rhat
 # ggsave(paste0("/Rhat_mibi_cytof_one_K_",K, ".png"), p_rhat, width = 9, height = 6)
 ```
 
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Rhat.", echo=FALSE, eval=FALSE}
+knitr::include_graphics("Rhat_mibi_cytof_one_K_5.png")
+```
+
 Compute ESS
 
-```{r}
+```{r eval=FALSE}
 # ESS bulk and ESS tail at least 100 per Markov Chain in order to be reliable and indicate that estimates of respective posterior quantiles are reliable
 
 p_ess_bulk <- ggplot(data.frame(ESS_bulk = ESS_bulk)) +
@@ -861,8 +910,17 @@ p_ess_tail
 # ggsave(paste0("ess_tail_mibi_cytof_one_K_",K, ".png"), p_ess_tail, width = 9, height = 6)
 ```
 
-# Model assesment on simulated data
-```{r}
+
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Effective sample size", echo=FALSE}
+knitr::include_graphics("ess_tail_mibi_cytof_one_K_5.png")
+```
+
+
+## Model assessment on simulated data
+
+For the model assessment, we simulate data from the fitted model and plot the distribution of the median of protein expression.
+
+```{r eval=FALSE}
 # Simulated data
 x_sim <- samples$x_sim # iteration * samples * ASVs
 # Choose only the first chain
@@ -896,16 +954,17 @@ p_hist_obs_sim
 # ggsave(paste0("model_assesment_hist_obs_sim_mibi_cytof_one_K_",K, ".png"), p_hist_obs_sim, width = 12, height = 6)
 ```
 
-The distribution of observed median of each protein expression (first facet) is similar to median of simulated data from the fitted topic model (other facets).
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Model assessment.", echo=FALSE}
+knitr::include_graphics("model_assesment_hist_obs_sim_mibi_cytof_one_K_5.png")
+```
 
+The distribution of the observed median of each protein expression (first facet) is similar to the median of simulated data from the fitted topic model (other facets).
 
+# Infer spatial location of CyTOF immune cells
 
-# Infer spatial location of cytof immune cells
+We use the sample from the first chain. 
 
-We use the sample from the first chain
-
-- Create a Topic $*$ Chain matrix
-```{r}
+```{r eval=FALSE}
 theta <- samples$theta 
 theta_aligned <- theta[1:(iter/2), ,]
 dimnames(theta_aligned)[[2]] <- mae_train$cell_id
@@ -927,7 +986,8 @@ theta_all$cell_type <- factor(theta_all$cell_type)
 theta_all$method <- ifelse(is.na(theta_all$cell_type), "cytof", as.character(theta_all$cell_type))
 ```
 
-Based on the median topic distribution identified the most dominated topic in each cell
+Based on the median topic distribution, we identify the most dominant topic in each cell.
+
 ```{r eval=FALSE}
 theta_summary <- theta_all %>% 
   group_by(Sample, Topic, method) %>% 
@@ -947,13 +1007,13 @@ theta_summary_2 <- theta_summary %>%
 
 ```
 
-```{r warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE, eval=FALSE}
 theta_summary_2 <- readRDS(paste0("co_location_mibi_cytof_one_K_", K, ".rds"))
 ```
 
-MIBI has only one site so we may not be able to infer spatial location for some cells in CyTOF.
+MIBI has only one site, so we may not infer spatial location for some cells in CyTOF.
 
-```{r warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE, eval=FALSE}
 # mibi X, Y coordinates
 df <- data.frame(Sample = mae_train$cell_id, X = mae_train$centroid_X, Y = mae_train$centroid_Y)
 df <- left_join(theta_summary_2, df, by = "Sample") %>% data.frame()
@@ -979,8 +1039,9 @@ for(i in 1:dim(df)[1]){
 }
 ```
 
-Plot the spatial location of cytof cells from patient BB028
-```{r}
+Plot the spatial location of CyTOF cells from patient BB028.
+
+```{r eval=FALSE}
 manual_col <- tableau_color_pal("Classic 20")(length(unique(df$method)))
 df$method <- factor(df$method)
 df_cytof <- dplyr::filter(df, method == "cytof")
@@ -999,9 +1060,14 @@ p_co
 # ggsave(paste0("co_location_mibi_cytof_one_K_", K, ".png"), p_co, width = 15, height = 15)
 ```
 
+```{r fig.align = 'center', out.width = "75%", fig.cap = "Labels show the inferred co-location of immune cells from CyTOF data (some are overlapping). We assign the spatial location of MIBI-TOF cells to the CyTOF data based on each cell's topic distribution.", echo=FALSE}
+knitr::include_graphics("co_location_mibi_cytof_one_K_5.png")
+```
+
 
 # Predict spatial pattern of proteins not measured in the MIBI-TOF
-```{r}
+
+```{r eval=FALSE}
 proteins_not_measured_mibi <- rowData(mae[["cd45"]])$marker_name[!(as.character(rowData(mae[["cd45"]])$marker_name) %in% as.character(rowData(mae[["mibi"]])$channel_name))] %>% as.character()
 
 # Simulated data
@@ -1045,7 +1111,7 @@ p1
 ```
 
 
-```{r}
+```{r eval=FALSE}
 # Simulated data
 x_sim <- samples$x_sim # iteration * samples * ASVs
 # Choose only the first chain
@@ -1067,8 +1133,7 @@ x_sim_mibi_predict_t <- asinh(x_sim_mibi_predict)
 manual_col <- tableau_color_pal("Classic 20")(length(unique(mae_train$cell_type)))
 
 
-# UMAP of measured and predicted protein
-# UMAP of measured proteins
+# UMAP of measured and predicted protein expression
 mibi_umap <- umap(x_sim_mibi_predict_t)
 umap_df <- data.frame(UMAP1 = mibi_umap[,1], 
                       UMAP2 = mibi_umap[,2], 
@@ -1088,11 +1153,10 @@ p22 <- ggplot(data = umap_df,
   theme(aspect.ratio = 1, plot.title = element_text(hjust = 0.5))
 p22
 
-
 ```
 
 
-```{r}
+```{r eval=FALSE}
 # Simulated data
 x_sim <- samples$x_sim # iteration * samples * ASVs
 # Choose only the first chain
@@ -1139,11 +1203,17 @@ p23
 
 ```
 
-```{r}
+```{r eval=FALSE}
 com_p <- grid.arrange(p1, arrangeGrob(p22, p23, ncol=1), ncol=2, widths=c(1,1.2))
-
 
 # ggsave("predicted_mibi_protein.png", com_p, width = 20, height = 15)
 ```
 
-The clusters of cells are clearly identified when using observed and predicted protein expressions.
+```{r fig.align = 'center', out.width = "75%", fig.cap = "On the left, the first two dimensions of UMAP on the observed markers in the MIBI-TOF data. On the right, the first two dimensions of UMAP on the simulated data from the fitted model with predicted marker expression were not observed in MIBI-TOF data.", echo=FALSE}
+knitr::include_graphics("predicted_mibi_protein.png")
+```
+
+The clusters of cells are identified when using observed and predicted protein expressions.
+
+
+# References
